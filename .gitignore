@@ -1,0 +1,37 @@
+# --- Root ---
+node_modules/
+.vscode/
+.idea/
+.DS_Store
+*.log
+*.swp
+*.swo
+
+# --- Backend ---
+Backend/venv/
+Backend/__pycache__/
+Backend/*.py[cod]
+Backend/.env
+Backend/.env.test
+Backend/.pytest_cache/
+
+# Data & Storage (Don't push huge scraped data or local DBs)
+Backend/data/
+Backend/vector_store/
+Backend/storage/
+Backend/cleaned_pages/
+Backend/execution_log.txt
+Backend/fix_log.txt
+Backend/dir_list.txt
+
+# --- Frontend ---
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.env
+frontend/*.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+frontend/lerna-debug.log*

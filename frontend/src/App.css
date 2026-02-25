@@ -1,0 +1,381 @@
+/* App Component Styles */
+
+.app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Navigation Bar */
+.navbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.nav-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: var(--spacing-sm) var(--spacing-lg);
+}
+
+.nav-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.brand-icon {
+    font-size: 28px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary-gradient);
+    border-radius: var(--border-radius-md);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.brand-text {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.nav-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+/* Status Indicator */
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-full);
+    font-size: var(--font-size-xs);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.online .status-dot {
+    background: var(--success-color);
+    box-shadow: 0 0 8px var(--success-color);
+}
+
+.status-indicator.offline .status-dot {
+    background: var(--error-color);
+    box-shadow: 0 0 8px var(--error-color);
+}
+
+.status-indicator.checking .status-dot {
+    background: var(--warning-color);
+    box-shadow: 0 0 8px var(--warning-color);
+}
+
+.status-indicator.online {
+    color: var(--success-color);
+}
+
+.status-indicator.offline {
+    color: var(--error-color);
+}
+
+.status-indicator.checking {
+    color: var(--warning-color);
+}
+
+/* Index Badge */
+.index-badge {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--border-radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    transition: all 0.4s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Indexed State - Vibrant Green Glow */
+.index-badge.ready {
+    background: linear-gradient(135deg, rgba(72, 187, 120, 0.2), rgba(56, 178, 172, 0.2));
+    border: 1px solid rgba(72, 187, 120, 0.5);
+    color: #48bb78;
+    box-shadow: 0 0 20px rgba(72, 187, 120, 0.3), inset 0 0 15px rgba(72, 187, 120, 0.1);
+    animation: successGlow 2s ease-in-out infinite;
+}
+
+.index-badge.ready .indexed-icon {
+    animation: bounceIn 0.5s ease;
+}
+
+.index-badge.ready .indexed-text {
+    font-weight: 600;
+    margin-right: var(--spacing-xs);
+}
+
+.index-badge.ready .indexed-count {
+    opacity: 0.8;
+    font-size: 10px;
+    padding-left: var(--spacing-xs);
+    border-left: 1px solid rgba(72, 187, 120, 0.3);
+}
+
+/* Not Indexed State */
+.index-badge.not-ready {
+    background: rgba(237, 137, 54, 0.1);
+    border: 1px solid rgba(237, 137, 54, 0.3);
+    color: var(--warning-color);
+}
+
+/* Indexing State - Animated Progress */
+.index-badge.indexing {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+    border: 1px solid rgba(102, 126, 234, 0.5);
+    color: #667eea;
+    padding-right: var(--spacing-md);
+    min-width: 160px;
+    box-shadow: 0 0 15px rgba(102, 126, 234, 0.3);
+}
+
+.index-badge.indexing .indexing-spinner {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+.index-badge.indexing .indexing-text {
+    font-weight: 600;
+    margin-right: var(--spacing-xs);
+}
+
+/* Mini Progress Bar inside badge */
+.mini-progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 0 0 var(--border-radius-full) var(--border-radius-full);
+    overflow: hidden;
+}
+
+.mini-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2, #f093fb);
+    background-size: 200% 100%;
+    animation: progressShimmer 1.5s ease-in-out infinite;
+    border-radius: inherit;
+    transition: width 0.3s ease;
+}
+
+/* Animations */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes successGlow {
+
+    0%,
+    100% {
+        box-shadow: 0 0 20px rgba(72, 187, 120, 0.3), inset 0 0 15px rgba(72, 187, 120, 0.1);
+    }
+
+    50% {
+        box-shadow: 0 0 30px rgba(72, 187, 120, 0.5), inset 0 0 20px rgba(72, 187, 120, 0.15);
+    }
+}
+
+@keyframes progressShimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+@keyframes bounceIn {
+    0% {
+        transform: scale(0);
+    }
+
+    50% {
+        transform: scale(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Admin Button */
+.admin-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-full);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.admin-btn:hover {
+    background: rgba(102, 126, 234, 0.1);
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+}
+
+/* Clear Chat Button */
+.clear-chat-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-full);
+    color: var(--text-primary);
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.clear-chat-btn:hover {
+    background: rgba(250, 82, 82, 0.1);
+    border-color: var(--error-color);
+    transform: translateY(-2px);
+}
+
+.clear-chat-btn:active {
+    transform: translateY(0);
+}
+
+/* Main Content */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Offline Warning */
+.offline-warning {
+    background: rgba(245, 101, 101, 0.1);
+    border: 1px solid rgba(245, 101, 101, 0.3);
+    margin: var(--spacing-md);
+    border-radius: var(--border-radius-lg);
+    animation: fadeIn 0.3s ease;
+}
+
+.warning-content {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    padding: var(--spacing-lg);
+}
+
+.warning-icon {
+    font-size: 32px;
+}
+
+.warning-content h3 {
+    margin: 0 0 var(--spacing-xs);
+    color: var(--error-color);
+    font-size: var(--font-size-lg);
+}
+
+.warning-content p {
+    margin: 0 0 var(--spacing-sm);
+    color: var(--text-secondary);
+}
+
+.warning-content code {
+    display: inline-block;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--border-radius-sm);
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: var(--font-size-sm);
+    color: var(--primary-light);
+}
+
+/* Footer */
+.app-footer {
+    text-align: center;
+    padding: var(--spacing-md);
+    background: var(--bg-glass);
+    border-top: 1px solid var(--border-color);
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+}
+
+.app-footer p {
+    margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .nav-container {
+        padding: var(--spacing-sm);
+    }
+
+    .brand-text {
+        display: none;
+    }
+
+    .admin-btn-text {
+        display: none;
+    }
+
+    .status-text {
+        display: none;
+    }
+
+    .index-badge {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .nav-actions {
+        gap: var(--spacing-sm);
+    }
+}
