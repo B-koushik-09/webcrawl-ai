@@ -8,7 +8,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 # Load environment variables from .env file
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 
 import os
 key = os.getenv('FIRECRAWL_API_KEY')
@@ -44,9 +44,6 @@ class ChatResponse(BaseModel):
     confidence: float
     grounded: bool
     sources_count: int
-
-
-
 
 
 class StatusResponse(BaseModel):
@@ -86,10 +83,11 @@ async def lifespan(app: FastAPI):
     # Load persistent knowledge index (automatically loads from disk)
     knowledge_index = KnowledgeIndex()
     
-    # Check if index has data
-    if knowledge_index.status.get('indexed', False):
+    # Check if index has data (from status file OR live ChromaDB collection)
+    chunk_count = knowledge_index.collection.count()
+    if knowledge_index.status.get('indexed', False) or chunk_count > 0:
         rag_engine = initialize_rag_engine(knowledge_index)
-        print(f"[OK] Knowledge index loaded: {len(knowledge_index.items)} items")
+        print(f"[OK] Knowledge index loaded: {chunk_count} chunks in ChromaDB")
     else:
         print("[!] No indexed data found. Please run indexing first.")
         rag_engine = RAGEngine(knowledge_index)
@@ -178,14 +176,14 @@ async def chat(request: ChatRequest):
         )
     
     # Check if index has data
-    if rag_engine.index.index is None or rag_engine.index.index.ntotal == 0:
-        print(f"[ERROR] Index is empty! ntotal = {rag_engine.index.index.ntotal if rag_engine.index.index else 'None'}")
+    if rag_engine.index.collection is None or rag_engine.index.collection.count() == 0:
+        print(f"[ERROR] Index is empty! chunk_count = {rag_engine.index.collection.count() if rag_engine.index.collection else '0'}")
         raise HTTPException(
             status_code=503,
             detail="Knowledge base is empty. Please run indexing first."
         )
     
-    print(f"[OK] RAG engine ready. Index has {rag_engine.index.index.ntotal} items")
+    print(f"[OK] RAG engine ready. Index has {rag_engine.index.collection.count()} items")
     
     try:
         # Query the RAG engine
@@ -222,12 +220,14 @@ async def get_suggestions():
     """Get suggested questions for the chat interface."""
     return {
         "suggestions": [
+            "Who is the principal of VNRVJIET?",
+            "Who is the HOD of CSE department?",
+            "Who is the HOD of EEE?",
             "What is the fee structure for B.Tech?",
-            "What are the placement statistics?",
-            "Who is the principal of the college?",
-            "What courses are offered?",
-            "What is the examination pattern?",
-            "What are the admission requirements?",
+            "What is the highest placement package in CSE?",
+            "How many students were placed in Amazon?",
+            "What is the average package of CSE?",
+            "What are the placement statistics of CSE 2025?",
         ]
     }
 
@@ -513,7 +513,7 @@ async def rebuild_index():
             # Update status
             page_count = total_webpages + total_custom
             pdf_count = total_pdfs
-            chunk_count = index.index.ntotal if index.index else 0
+            chunk_count = index.collection.count() if index.collection else 0
             
             # Save persistent status with CORRECT counts
             index.save_status(True, "rebuilt", page_count, pdf_count, chunk_count)

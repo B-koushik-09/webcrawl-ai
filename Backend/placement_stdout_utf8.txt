@@ -1,0 +1,88 @@
+﻿Loading Index...
+[INDEX] Initializing ChromaDB at C:\VNRVJIET\Projects\ai-chat\Backend\storage\chromadb
+Initializing RAG Engine...
+
+Querying: cse training and placement department faculty list
+
+[RAG ENGINE] Processing query: 'cse training and placement department faculty list...'
+[RAG ENGINE] Config: top_k=3, min_similarity=0.6
+[RAG ENGINE] Detecting question type for: 'cse training and placement department faculty list'
+[QUESTION TYPE] Priority override: 'faculty' (matched: \b(?:placement|training)\b.*\bfaculty\b)
+[RAG ENGINE] Question type detected: faculty
+[RAG ENGINE] [CSE] CSE PRIORITY DETECTED -- using ChromaDB filter 'dept': 'CSE'
+[RAG ENGINE] [FACULTY] Faculty query: Setting top_k=10 for faculty lookup
+[RAG ENGINE] Searching index for relevant content (k=10, where={'dept': 'CSE'})...
+[INDEX SEARCH] Query: 'cse training and placement department faculty list...', top_k=10, where={'dept': 'CSE'}
+[EMBED] [*] Initializing embedding model... (one-time setup)
+[EMBED] [OK] Embedding model ready (BAAI/bge-base-en-v1.5)
+[RAG ENGINE] Found 10 relevant chunks
+
+============================================================
+RETRIEVED CHUNKS FOR: 'cse training and placement department faculty list...'
+============================================================
+
+[CHUNK 1] Similarity: 0.735
+  Source: Faculty (webpage)
+  Content snippet: ## Department:
+**Department:** CSE (CYS, DS, AI&DS)...
+
+[CHUNK 2] Similarity: 0.734
+  Source: Faculty (webpage)
+  Content snippet: ## Department:
+**Department:** CSE (Cys, DS)...
+
+[CHUNK 3] Similarity: 0.730
+  Source: Faculty (webpage)
+  Content snippet: ## Department:
+**Department:** CSE(Cys-DS and AI&DS)...
+
+[CHUNK 4] Similarity: 0.729
+  Source: Faculty (webpage)
+  Content snippet: ## Department:
+**Department:** CSE- (DS,Cys) and AI&DS...
+
+[CHUNK 5] Similarity: 0.728
+  Source: Faculty (webpage)
+  Content snippet: ## Department:
+**Department:** CSE-DS&CYS...
+============================================================
+
+
+[VERIFICATION] Applying 'faculty' verification rules...
+[VERIFY BOOST] FAQ source boosted: Faculty... +0.15
+[VERIFY BOOST] FAQ source boosted: Faculty... +0.15
+[VERIFY BOOST] FAQ source boosted: Faculty... +0.15
+[VERIFY BOOST] FAQ source boosted: Faculty... +0.15
+[VERIFY BOOST] FAQ source boosted: Faculty... +0.15
+[VERIFY BOOST] FAQ source boosted: Faculty... +0.15
+[VERIFY BOOST] FAQ source boosted: Faculty... +0.15
+[VERIFY BOOST] FAQ source boosted: Faculty... +0.15
+[VERIFY BOOST] FAQ source boosted: Faculty... +0.15
+[VERIFY BOOST] FAQ source boosted: Faculty... +0.15
+[VERIFY OK] Chunk from 'Faculty' matches pattern: (?:designation|department|experience|spe...
+[VERIFY OK] Chunk from 'Faculty' matches pattern: (?:designation|department|experience|spe...
+[VERIFY OK] Chunk from 'Faculty' matches pattern: (?:designation|department|experience|spe...
+[VERIFY OK] Chunk from 'Faculty' matches pattern: (?:designation|department|experience|spe...
+[VERIFY OK] Chunk from 'Faculty' matches pattern: (?:designation|department|experience|spe...
+[VERIFY OK] Chunk from 'Faculty' matches pattern: (?:designation|department|experience|spe...
+[VERIFY OK] Chunk from 'Faculty' matches pattern: (?:designation|department|experience|spe...
+[VERIFY OK] Chunk from 'Faculty' matches pattern: (?:designation|department|experience|spe...
+[VERIFY OK] Chunk from 'Faculty' matches pattern: (?:designation|department|experience|spe...
+[VERIFY OK] Chunk from 'Faculty' matches pattern: (?:designation|department|experience|spe...
+[VERIFY] Chunks re-sorted by boosted scores
+[VERIFY] 10/10 chunks passed verification for 'faculty' query
+[VERIFICATION] OK: 10 chunks passed verification
+[RAG ENGINE] Building context from verified results...
+[RAG ENGINE] Context built: 718 chars
+[RAG ENGINE] Created 1 citations
+[RAG ENGINE] Generating answer via LLM...
+[LLM] [OK] Gemini ready -> gemini-2.0-flash
+[LLM] [OK] OpenRouter ready -> mistralai/mistral-7b-instruct
+[LLM] [OK] HF Router ready -> meta-llama/Meta-Llama-3-8B-Instruct
+[RAG ENGINE] Using gemini-2.0-flash for answer generation...
+[LLM] [WARN] Gemini quota exhausted -- trying next provider
+[LLM] [WARN] OpenRouter (mistralai/mistral-7b-instruct): Error code: 400 - {'error': {'message': 'Provider returned error', 'code': 400, 'metadata': {'raw': '{\n  "id": "oYu5w3u-2kFHot-9d3e3e5734c4d896",\n  "error": {\n    "message": "Unable to access non-serverless model mistralai/Mistral-7B-Instruct-v0.3. Please visit https://api.together.ai/models/mistralai/Mistral-7B-Instruct-v0.3 to create and start a new dedicated endpoint for the model.",\n    "type": "invalid_request_error",\n    "param": null,\n    "code": "model_not_available"\n  }\n}', 'provider_name': 'Together', 'is_byok': False, 'retry_after_seconds': 2}}, 'user_id': 'user_3A4Fwh313H0JV3enMApNtXw5OtH'}
+[LLM] [OK] Answered by OpenRouter (upstage/solar-pro-3:free) in 8.1s
+[RAG ENGINE] LLM answer generated in 8.12s
+[RAG ENGINE] Answer generated. Confidence: 0.85
+Done. Wrote to placement_test_out.txt

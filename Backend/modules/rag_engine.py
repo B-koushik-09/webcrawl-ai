@@ -9,8 +9,8 @@ from pathlib import Path
 
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
-from config import RAG_CONFIG, CSE_QUERY_KEYWORDS, GENERAL_KEYWORDS, OTHER_BRANCH_KEYWORDS
-from modules.embeddings import KnowledgeIndex, KnowledgeItem
+from config import RAG_CONFIG, CSE_QUERY_KEYWORDS, GENERAL_KEYWORDS, OTHER_BRANCH_KEYWORDS, CSE_SUB_DEPT_KEYWORDS
+from modules.embeddings import KnowledgeIndex, KnowledgeItem, get_knowledge_index
 
 
 @dataclass
@@ -194,23 +194,41 @@ class RAGEngine:
                 r'(?:campus|placement)\s*(?:drive|interview|recruitment)',
                 # Package descriptors
                 r'(?:highest|average|median|minimum)\s*(?:package|salary|ctc)',
+                # Training & Placement department/cell context
+                r'(?:training|T\s*&\s*P|T\s*and\s*P)\s*(?:placement|cell|department|office|officer)',
+                r'(?:placement)\s*(?:cell|department|office|officer)',
+                # Faculty in placement context
+                r'(?:professor|faculty|designation|coordinator).*(?:placement|training)',
+                r'(?:placement|training).*(?:professor|faculty|designation|coordinator)',
             ],
-            'not_found_message': "I couldn't find detailed placement statistics. Please contact the Training & Placement Cell."
+            'not_found_message': "I couldn't find detailed placement information. Please contact the Training & Placement Cell."
         },
         'principal': {
             'required_patterns': [
-                r'(?:dr\.?|prof\.?|mr\.?|mrs\.?|ms\.?|sri|smt)\s+[A-Z][a-z]+',  # Dr. Name or Sri Name
+                r'(?:dr\.?|prof\.?|mr\.?|mrs\.?|ms\.?|sri|smt)\s+[A-Z][A-Za-z]+',  # Dr. Name or Sri Name, allow all caps
                 r'(?:principal|director|dean|hod)\s*:?\s*(?:dr\.?|prof\.?)?',
-                r'(?:head\s+of\s+(?:department|institution))\s*:?',
+                r'(?:head\s+(?:of\s+)?(?:department|institution))\s*:?',
+                r'(?:professor\s+and\s+head)',
                 r'(?:chairman|chairperson)\s*[,:]',  # Chairman, Nominated
                 r'governing\s+council',
                 r'nominated\s+by\s+society',
+                r'\|\s*\**Dr\.\s*Vadlana\s+Baby\**\s*\|',  # Specific match for HOD of CSE row in markdown table
+                # HOD-specific patterns for department faculty pages
+                r'(?:associate|assistant)?\s*professor\s+and\s+head',
+                r'(?:incharge|in-charge)\s+hod',
+                r'(?:department|dept)\s*(?:of|:)\s*(?:ece|eee|cse|mech|civil|it|aiml|iot)',
             ],
             'boost_patterns': [
                 r'governing\s+council',
                 r'chairman.*(?:nominated|society)',
                 r'member\s+secretary',
                 r'principal.*member',
+                r'B\.\s*Chennakesava\s*Rao',  # Boost current principal
+                r'Sagar\s+Yeruva',             # HOD of CSE-IOT and CSE-AIML
+                r'Vadlana\s+Baby',             # HOD of CSE
+                r'Poonam\s+Upadhyay',          # HOD of EEE
+                r'Padma\s+Sai',                # HOD of ECE
+                r'D\.\s*Suresh\s+Babu',        # Chairman
             ],
             'exclude_patterns': [
                 # Exclude BOS/committee chairmen from faculty PDFs
@@ -220,6 +238,16 @@ class RAGEngine:
                 r'Chairman\s+(?:BOS|Board|IAC|IQAC|Disciplinary)',
                 r'C_cube\s+Consultants',  # Guest lecturer named "Chairman" of unrelated org
                 r'Jaitley\s+Chairman',  # Specific noise: guest lecturer
+                
+                # AGGRESSIVE FILTERS FOR OLD LEADERSHIP (C D Naidu)
+                r'C\.?\s*D\.?\s*Naidu',
+                r'Dr\.\s*C\.?\s*D\.?\s*Naidu',
+                r'Naidu\s*,\s*Principal',
+                r'C\s*D\s*Naidu',
+                r'C\.D\.Naidu',
+                r'\bNaidu\b(?!\s+(?:Road|Street|College|Building))', # Match Naidu unless it's part of an address/place
+                r'former\s+principal',
+                r'past\s+principal',
             ],
             'not_found_message': "I couldn't find specific information about the principal/director/chairman. Please check the About Us or Governance page on the college website."
         },
@@ -306,7 +334,7 @@ class RAGEngine:
     }
     
     def __init__(self, knowledge_index: Optional[KnowledgeIndex] = None):
-        self.index = knowledge_index
+        self.index = knowledge_index or get_knowledge_index()
         self.config = RAG_CONFIG
         self._llm = None  # Lazy-loaded LLM generator
         self._use_llm = True  # Toggle for LLM generation
@@ -338,10 +366,26 @@ class RAGEngine:
         # This handles cases where queries match multiple types (e.g., "when was established" 
         # could match both 'schedule' (when) and 'about' (establish))
         PRIORITY_OVERRIDES = {
+            # MUST check leadership FIRST — HOD/head/chairman queries frequently mismatch
+            # because expanded queries contain words that trigger other types
+            # (e.g., "Internet of Things" -> 'intern' -> wrong 'placement' type)
+            'principal': [
+                r'\bhod\b',
+                r'\bhead\s+of\s+(?:department|dept|iot|aiml|cse|ece|eee|mech|it)\b',
+                r'\bwho\s+is\s+(?:the\s+)?(?:principal|chairman|director|dean)\b',
+                r'\bprincipal\s+of\b',
+                r'\bchairman\s+of\b',
+            ],
             # If query contains establishment keywords, it's an 'about' query even if it has 'when'
             'about': [r'\bestablish', r'\bfound(?:ed)?(?:\s+in)?\b', r'\bstarted\s+in\b', r'\binception\b', r'\borigin\b'],
             # If query asks about designation/department/experience of someone, it's a faculty query
-            'faculty': [r'\bdesignation\s+of\b', r'\bdepartment\s+of\s+(?!computer|cse|ece|eee|mech|civil|auto)', r'\bexperience\s+of\b', r'\bqualification\s+of\b', r'\btell\s+me\s+about\s+(?:mr|mrs|ms|dr|prof)'],
+            'faculty': [
+                r'\bdesignation\s+of\b', r'\bdepartment\s+of\s+(?!computer|cse|ece|eee|mech|civil|auto)',
+                r'\bexperience\s+of\b', r'\bqualification\s+of\b',
+                r'\btell\s+me\s+about\s+(?:mr|mrs|ms|dr|prof)',
+                r'\bfaculty\b.*\b(?:placement|training)\b',  # "faculty list of placement dept"
+                r'\b(?:placement|training)\b.*\bfaculty\b',  # "placement department faculty"
+            ],
         }
         
         # Check priority overrides first
@@ -466,7 +510,7 @@ class RAGEngine:
                                             f"ID: {clean_cells[1] if len(clean_cells)>1 else ''}",
                                             f"Name: {clean_cells[2] if len(clean_cells)>2 else ''}",
                                             f"Designation: {clean_cells[3] if len(clean_cells)>3 else ''}",
-                                            f"Department: {clean_cells[4] if len(clean_cells)>4 and 'Dept' in clean_cells[4] else 'CSE'}", # Default to CSE if context implies
+                                            f"Department: {item.metadata.get('dept', 'OTHER')}", # Use metadata tag instead of hardcoded default
                                         ]
                                         # Add remaining cells as raw text
                                         if len(clean_cells) > 5:
@@ -485,13 +529,17 @@ class RAGEngine:
                 continue
                 
             # Add source attribution
+            dept_tag = ""
+            if item.metadata and item.metadata.get('dept'):
+                dept_tag = f" [Department: {item.metadata.get('dept')}]"
+                
             if item.source_type == 'pdf':
                 header = f"[From {item.source_name}"
                 if item.page_number:
                     header += f", Page {item.page_number}"
-                header += "]"
+                header += f"]{dept_tag}"
             else:
-                header = f"[From webpage: {item.source_name}]"
+                header = f"[From webpage: {item.source_name}]{dept_tag}"
             
             chunk = f"{header}\n{content}"
             
@@ -520,8 +568,8 @@ class RAGEngine:
             context = self._clean_context(context)
             
             # Split context into sentences
-            # Use a more robust regex for sentence splitting
-            sentences = re.split(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s', context)
+            # More robust regex for sentence splitting preserving names with initials like "Dr. B. Chennakesava"
+            sentences = re.split(r'(?<!\b[A-Z]\.)(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s', context)
             
             # Expanded junk patterns for aggressive filtering
             JUNK_PATTERNS = [
@@ -533,6 +581,13 @@ class RAGEngine:
                 'privacy policy', 'terms of service', 'back to top',
                 'search', 'download', 'print', 'bookmark'
             ]
+            
+            # Compile regex pattern with word boundaries for junk matching
+            import re
+            junk_regex = re.compile(
+                r'\b(?:' + '|'.join(map(re.escape, JUNK_PATTERNS)) + r')\b', 
+                re.IGNORECASE
+            )
             
             candidates = []
             for sent in sentences:
@@ -550,8 +605,8 @@ class RAGEngine:
                 if re.match(r'^Page \d+$', clean_sent):
                     continue
                 
-                # Skip sentences with junk patterns
-                if any(junk in clean_sent.lower() for junk in JUNK_PATTERNS):
+                # Skip sentences with junk patterns using word boundaries
+                if junk_regex.search(clean_sent):
                     continue
                 
                 # Skip sentences that are mostly navigation (short with common words)
@@ -782,36 +837,6 @@ class RAGEngine:
         4. Content Verification: Ensure chunks match the question type (e.g. fee queries need money).
         """
         # ========================================================
-        # CSE DEPARTMENT BOOSTING (Applied AFTER similarity threshold)
-        # Only active when is_cse_query=True. Penalizes but NEVER removes.
-        # ========================================================
-        if is_cse_query:
-            print(f"[VERIFY] 🎓 CSE query — applying department-aware scoring")
-            cse_boosted = []
-            cse_count = 0
-            for item, score in results:
-                dept = item.metadata.get('dept', 'OTHER')  # Fallback for old index data
-                if dept == 'CSE':
-                    boosted = score * 1.5
-                    cse_count += 1
-                    print(f"[VERIFY CSE BOOST] CSE chunk boosted: {item.source_name[:50]}... ×1.5 ({score:.3f} → {boosted:.3f})")
-                    cse_boosted.append((item, boosted))
-                else:
-                    penalized = score * 0.5
-                    print(f"[VERIFY CSE PENALIZE] Non-CSE chunk penalized: {item.source_name[:50]}... ×0.5 ({score:.3f} → {penalized:.3f})")
-                    cse_boosted.append((item, penalized))  # Penalize but KEEP
-            
-            # Re-sort by boosted scores
-            cse_boosted.sort(key=lambda x: x[1], reverse=True)
-            
-            # FALLBACK: If no CSE chunks found at all, revert to original results
-            if cse_count == 0:
-                print(f"[VERIFY CSE FALLBACK] No CSE chunks found — reverting to normal retrieval")
-            else:
-                results = cse_boosted
-                print(f"[VERIFY CSE] {cse_count} CSE chunks boosted, {len(results) - cse_count} other chunks penalized")
-        
-        # ========================================================
         # FAQ SOURCE BOOSTING (Prioritize FAQ/custom sources)
         # ========================================================
         # Boost chunks from FAQ.md, faq.md, 000_contact_info.md, etc.
@@ -841,67 +866,6 @@ class RAGEngine:
         
         # Compute query_lower once for all filtering stages
         query_lower = query.lower()
-        
-        # ========================================================
-        # LEADERSHIP SOURCE FILTERING (chairman, director, dean)
-        # ========================================================
-        # For leadership queries, strongly boost governance pages and penalize unrelated PDFs
-        if question_type == 'principal':
-            leadership_terms = ['chairman', 'director', 'principal', 'dean']
-            is_leadership_query = any(term in query_lower for term in leadership_terms)
-            
-            if is_leadership_query:
-                print(f"[VERIFY] Leadership query detected — applying source-aware filtering")
-                
-                # Define priority sources for leadership queries
-                PRIORITY_SOURCES = [
-                    'governing', 'governance', 'management', 'about',
-                    'administration', 'council', 'leadership',
-                ]
-                
-                leadership_filtered = []
-                for item, score in results:
-                    source_lower = item.source_name.lower()
-                    content_lower = item.content.lower()
-                    source_url = (item.source_url or "").lower()
-                    
-                    # Check if this is a governance/leadership source
-                    is_priority = any(
-                        kw in source_lower or kw in source_url
-                        for kw in PRIORITY_SOURCES
-                    )
-                    
-                    # Check if chunk actually contains governance context
-                    has_governance_context = bool(re.search(
-                        r'governing\s+council|nominated\s+by\s+society|member\s+secretary|'
-                        r'chairman.*(?:vj|vjiet|vnr)|ex.officio',
-                        content_lower
-                    ))
-                    
-                    if is_priority or has_governance_context:
-                        # Strong boost for governance sources
-                        boosted = min(score + 0.25, 1.0)
-                        print(f"[VERIFY BOOST] Leadership source boosted: {item.source_name[:50]}... +0.25")
-                        leadership_filtered.append((item, boosted))
-                    elif item.source_type == 'pdf':
-                        # Penalize PDF sources for leadership queries
-                        # Faculty PDFs mention 'chairman' in committee context, not college leadership
-                        penalized = max(score - 0.2, 0.0)
-                        print(f"[VERIFY PENALIZE] PDF penalized for leadership query: {item.source_name[:50]}... -0.20")
-                        leadership_filtered.append((item, penalized))
-                    else:
-                        leadership_filtered.append((item, score))
-                
-                # Re-sort and apply stricter min_similarity for leadership queries
-                leadership_filtered.sort(key=lambda x: x[1], reverse=True)
-                # Only keep chunks above 0.5 for leadership queries (stricter threshold)
-                results = [(item, score) for item, score in leadership_filtered if score >= 0.5]
-                
-                if results:
-                    print(f"[VERIFY] Leadership filtering: {len(results)} chunks kept (min 0.5)")
-                else:
-                    print(f"[VERIFY WARNING] No chunks passed leadership filter — reverting to original")
-                    results = leadership_filtered  # Revert if too aggressive
         
         # ========================================================
         # PROGRAM FILTERING (B.Tech vs M.Tech)
@@ -1015,11 +979,28 @@ class RAGEngine:
             
             # Check if chunk matches any required pattern
             matches_pattern = False
-            for pattern in required_patterns:
-                if re.search(pattern, content, re.IGNORECASE):
+            
+            # Source-name whitelist: if the source name clearly matches the query type,
+            # auto-pass it (e.g., a chunk from "2021_25_batch_CSE_Placements" for a placement query)
+            source_name_lower = item.source_name.lower()
+            SOURCE_WHITELISTS = {
+                'placement': [r'placement', r'placed', r'recruit'],
+                'fee': [r'fee', r'tuition'],
+                'admission': [r'admission', r'eligib'],
+            }
+            whitelist_patterns = SOURCE_WHITELISTS.get(question_type, [])
+            for wp in whitelist_patterns:
+                if re.search(wp, source_name_lower):
                     matches_pattern = True
-                    print(f"[VERIFY OK] Chunk from '{item.source_name}' matches pattern: {pattern[:40]}...")
+                    print(f"[VERIFY OK] Chunk from '{item.source_name}' auto-passed (source name matches '{question_type}')")
                     break
+            
+            if not matches_pattern:
+                for pattern in required_patterns:
+                    if re.search(pattern, content, re.IGNORECASE):
+                        matches_pattern = True
+                        print(f"[VERIFY OK] Chunk from '{item.source_name}' matches pattern: {pattern[:40]}...")
+                        break
             
             if matches_pattern:
                 # Apply boost to score if matches boost patterns
@@ -1059,7 +1040,7 @@ class RAGEngine:
     
     def _extract_leadership_answer(self, query: str, results: List[Tuple[KnowledgeItem, float]]) -> Optional[str]:
         """
-        Direct extraction for leadership queries (chairman, principal, director, dean).
+        Direct extraction for leadership queries (chairman, principal, director, dean, hod).
         Extracts names from structured table data without relying on LLM.
         Returns a clean answer string, or None if extraction fails.
         
@@ -1077,6 +1058,7 @@ class RAGEngine:
             'principal': ['principal'],
             'director': ['director'],
             'dean': ['dean'],
+            'hod': ['hod', 'head of department', 'head'],
         }
         
         target_role = None
@@ -1087,8 +1069,39 @@ class RAGEngine:
         
         if not target_role:
             return None
-        
+            
         print(f"[EXTRACT] Looking for '{target_role}' in {len(results)} retrieved chunks...")
+        
+        # --------------------------------------------------------
+        # Strategy 0: BOOSTED NAME MATCH (highest priority)
+        # Check if any boost_patterns from ANSWER_VERIFICATION_RULES
+        # match in the retrieved chunks. This handles cases where the
+        # governance page lists the person with a different title
+        # (e.g., "Director" instead of "Principal").
+        # NOTE: HOD/dean/director all use 'principal' rules since all
+        # leadership boost patterns are stored there (no separate 'hod' key).
+        # --------------------------------------------------------
+        rules_key = target_role if target_role in self.ANSWER_VERIFICATION_RULES else 'principal'
+        question_rules = self.ANSWER_VERIFICATION_RULES.get(rules_key, self.DEFAULT_VERIFICATION)
+        boost_patterns = question_rules.get('boost_patterns', [])
+        
+        for item, score in results:
+            content = item.content
+            for bp in boost_patterns:
+                if re.search(bp, content, re.IGNORECASE):
+                    # Found the boosted pattern! Extract full name with honorific.
+                    # Allow optional middle initials between honorific and name (e.g. Dr. Y. Padma Sai)
+                    full_name_re = re.compile(
+                        r'((?:Dr\.?|Prof\.?|Sri|Smt\.?)\s+(?:[A-Z]\.?\s+)*' + bp + r')',
+                        re.IGNORECASE
+                    )
+                    fm = full_name_re.search(content)
+                    if fm:
+                        name = fm.group(1).strip().rstrip(',.')
+                        # Verify it looks like a person name (has uppercase + lowercase letters)
+                        if re.search(r'[A-Z][a-z]', name):
+                            print(f"[EXTRACT] Strategy 0 — boosted name match: {name}")
+                            return self._format_leadership_answer(target_role, name)
         
         for item, score in results:
             content = item.content
@@ -1153,8 +1166,9 @@ class RAGEngine:
             
             if target_role in source_lower or target_role in url_lower:
                 # This chunk is from a dedicated role page — extract first named person
+                # Capture the FULL name including honorific (Dr., Prof., Sri, etc.)
                 name_pattern = re.compile(
-                    r'(?:Dr\.?|Prof\.?|Sri|Smt\.?)\s+([A-Z][A-Za-z\.\s]{3,40}?)(?:\s+(?:graduated|is|has|was|served|worked|joined|received))',
+                    r'((?:Dr\.?|Prof\.?|Sri|Smt\.?)\s+[A-Z][A-Za-z\.\s]{3,40}?)(?:\s+(?:graduated|is|has|was|served|worked|joined|received))',
                     re.IGNORECASE
                 )
                 name_match = name_pattern.search(content)
@@ -1165,7 +1179,7 @@ class RAGEngine:
                 
                 # Fallback: find "working as **Principal** in VNR" pattern and look backward
                 role_mention = re.search(
-                    r'(?:Dr\.?|Prof\.?|Sri)\s+([A-Z][A-Za-z\s\.]+?)(?:\s+(?:is|has been|was)\s+(?:the\s+)?(?:currently\s+)?(?:working\s+as\s+)?\*{0,2}' + target_role + r')',
+                    r'((?:Dr\.?|Prof\.?|Sri)\s+[A-Z][A-Za-z\s\.]+?)(?:\s+(?:is|has been|was)\s+(?:the\s+)?(?:currently\s+)?(?:working\s+as\s+)?\*{0,2}' + target_role + r')',
                     content, re.IGNORECASE
                 )
                 if role_mention:
@@ -1186,6 +1200,60 @@ class RAGEngine:
         else:
             return f"The {role_title} of VNRVJIET is **{name}**."
 
+    def _get_hardcoded_override(self, query: str) -> Optional[str]:
+        """
+        Provides direct answers for known leadership/HOD queries where dynamic
+        retrieval is unreliable (names buried in faculty tables far below top-20).
+        
+        UPDATE THIS TABLE when staff changes occur.
+        Last updated: March 2026
+        """
+        query_lower = query.lower()
+        
+        # -----------------------------------------------------------------------
+        # HOD LOOKUP TABLE  (department keyword -> (name, dept_full_name))
+        # -----------------------------------------------------------------------
+        HOD_TABLE = {
+            # ECE
+            frozenset(['ece', 'electronics and communication', 'electronics & communication']): 
+                ('Dr. Y. Padma Sree', 'Electronics and Communication Engineering'),
+            # EEE
+            frozenset(['eee', 'electrical and electronics', 'electrical & electronics']):
+                ('Dr. Poonam Upadhyay', 'Electrical and Electronics Engineering'),
+            # CSE (plain)
+            frozenset(['cse', 'computer science']):
+                ('Dr. Vadlana Baby', 'Computer Science and Engineering'),
+            # CSBS
+            frozenset(['csbs', 'computer science and business', 'computer science & business', 'business systems']):
+                ('Dr. Vadlana Baby', 'Computer Science and Business Systems'),
+            # CSE-IoT
+            frozenset(['iot', 'internet of things', 'cse-iot', 'cse iot']):
+                ('Dr. Sagar Yeruva', 'CSE (Internet of Things)'),
+            # CSE-AIML
+            frozenset(['aiml', 'ai & ml', 'ai and ml', 'artificial intelligence', 'machine learning', 'cse-aiml']):
+                ('Dr. Sagar Yeruva', 'CSE (Artificial Intelligence & Machine Learning)'),
+            # Mechanical
+            frozenset(['mechanical', 'mech']):
+                ('Prof. K. Narayana Rao', 'Mechanical Engineering'),
+            # Civil
+            frozenset(['civil']):
+                ('Prof. P. Srinivas Rao', 'Civil Engineering'),
+            # IT
+            frozenset(['information technology', ' it department', 'dept of it']):
+                ('Dr. M. Sunil Kumar', 'Information Technology'),
+        }
+        
+        # Check if this is a HOD query
+        is_hod_query = re.search(r'\b(?:hod|head\s+of\s+(?:department|dept))\b', query_lower)
+        if not is_hod_query:
+            return None
+        
+        # Find matching department
+        for dept_keywords, (name, dept_name) in HOD_TABLE.items():
+            if any(kw in query_lower for kw in dept_keywords):
+                return f"The Head of the Department (HOD) of **{dept_name}** at VNRVJIET is **{name}**."
+
+        return None
 
     def query(self, query: str, top_k: Optional[int] = None) -> RAGResponse:
         """
@@ -1228,13 +1296,26 @@ class RAGEngine:
             query += " offers 17 B.Tech programmes 15 M.Tech programmes 5 Ph.D programmes"
             print(f"[RAG ENGINE] Expanded query with programme count keywords")
 
-        # Leadership Query Expansion (chairman, director, principal, dean)
+        # Leadership Query Expansion (chairman, director, principal, dean, hod)
         # Inject governance-specific keywords to bias FAISS retrieval toward correct pages
         leadership_keywords = {
-            r'\bchairman\b': "governing council chairman nominated by society",
-            r'\bdirector\b': "director administration advancement",
-            r'\bprincipal\b': "principal member secretary Dr. C. D. Naidu institution head",
+            r'\bchairman\b': "governing council chairman nominated by society Sri D. Suresh Babu",
+            r'\bdirector\b': "director administration advancement Dr. B. Chennakesava Rao",
+            r'\bprincipal\b': "principal member secretary Dr. B. Chennakesava Rao institution head VNRVJIET",
             r'\bdean\b': "dean academics administration",
+            r'\bhod\s+of\s+eee\b': "Dr. Poonam Upadhyay Professor and Head EEE Electrical Electronics",
+            r'\bhod\s+of\s+ece\b': "Professor and Head ECE Electronics Communication Dr. Y. Padma Sai",
+            r'\bhod\s+of\s+cse(?![-a-zA-Z])\b': "Dr. Vadlana Baby Associate Professor HOD CSE Computer Science",
+            r'\bhod\s+of\s+mech\b': "Professor and Head Mechanical Engineering",
+            r'\bhod\s+of\s+it\b': "Professor and Head Information Technology",
+            # IoT and AIML HOD — both are Dr. Sagar Yeruva
+            r'\bhod\s+of\s+(?:iot|internet\s+of\s+things|cse[-\s]iot)\b': "Dr. Sagar Yeruva Professor and Head CSE-IOT Internet of Things",
+            r'\bhod\s+of\s+(?:aiml|ai\s*&?\s*ml|cse[-\s]aiml|artificial\s+intelligence)\b': "Dr. Sagar Yeruva Professor and Head CSE-AIML Artificial Intelligence Machine Learning",
+            r'\bhead\s+of\s+(?:iot|internet\s+of\s+things)\b': "Dr. Sagar Yeruva Professor and Head CSE-IOT Internet of Things",
+            r'\bhead\s+of\s+(?:aiml|ai\s*&?\s*ml|artificial\s+intelligence)\b': "Dr. Sagar Yeruva Professor and Head CSE-AIML Artificial Intelligence Machine Learning",
+            # CSBS HOD — Dr. Vadlana Baby
+            r'\bhod\s+of\s+(?:csbs|cse[-\s]bs|computer\s+science.*business|business\s+systems)\b': "Dr. Vadlana Baby Professor and Head CSBS Computer Science Business Systems",
+            r'\bhead\s+of\s+(?:csbs|business\s+systems)\b': "Dr. Vadlana Baby Professor and Head CSBS Computer Science Business Systems",
         }
         for lk_pattern, lk_expansion in leadership_keywords.items():
             if re.search(lk_pattern, query, re.IGNORECASE):
@@ -1266,57 +1347,89 @@ class RAGEngine:
         # QUERY CLASSIFICATION DECISION (fixes retrieval bias)
         query_lower = query.lower()
         is_general_query = any(kw in query_lower for kw in GENERAL_KEYWORDS)
-        is_other_branch_query = any(kw in query_lower for kw in OTHER_BRANCH_KEYWORDS)
+        # Use word-boundary matching for OTHER_BRANCH_KEYWORDS to prevent
+        # 'it' from matching 'institution', 'civil' from matching 'civilization', etc.
+        is_other_branch_query = any(
+            re.search(r'\b' + re.escape(kw) + r'\b', query_lower)
+            for kw in OTHER_BRANCH_KEYWORDS
+        )
         is_cse_query_raw = any(kw in query_lower for kw in CSE_QUERY_KEYWORDS)
 
-        # Final Decision for CSE Boosting
+        # Build ChromaDB metadata filters
+        where_conditions = []
         is_cse_query = False
-        if is_cse_query_raw and not is_other_branch_query:
+        
+        # 1. Check for specific CSE Sub-Departments first!
+        sub_dept_match = None
+        for dept_tag, keywords in CSE_SUB_DEPT_KEYWORDS.items():
+            if any(kw in query_lower for kw in keywords):
+                sub_dept_match = dept_tag
+                break
+                
+        if sub_dept_match and not is_other_branch_query:
+            where_conditions.append({"dept": sub_dept_match})
+            print(f"[RAG ENGINE] [{sub_dept_match}] SUB-DEPT DETECTED -- using ChromaDB filter 'dept': '{sub_dept_match}'")
+        elif is_cse_query_raw and not is_other_branch_query:
             is_cse_query = True
-            print(f"[RAG ENGINE] 🎓 CSE PRIORITY DETECTED — will apply dept-aware boosting")
-        elif is_general_query:
-            print(f"[RAG ENGINE] 🟢 GENERAL QUERY DETECTED — using normal retrieval")
-            is_cse_query = False
+            # Expand to include all CSE sub-departments for general CSE queries
+            dept_options = ["CSE"] + list(CSE_SUB_DEPT_KEYWORDS.keys())
+            where_conditions.append({"dept": {"$in": dept_options}})
+            print(f"[RAG ENGINE] [CSE] GENERAL CSE PRIORITY DETECTED -- using ChromaDB filter 'dept' in {dept_options}")
         elif is_other_branch_query:
-            print(f"[RAG ENGINE] 🟡 OTHER BRANCH QUERY DETECTED — using normal retrieval")
-            is_cse_query = False
+            where_conditions.append({"dept": "OTHER"})
 
-        
+        # CRITICAL: For leadership queries (principal, chairman, dean, hod),
+        # CLEAR any department filter to ensure profile pages are always retrievable.
+        # Check BOTH question_type AND raw query keywords for double safety.
+        # Without this, the principal's page could be excluded if the query expansion
+        # accidentally triggers a department keyword match.
+        is_leadership_query = (
+            question_type in ['principal', 'leadership'] or
+            re.search(r'\b(?:hod|head\s+of\s+(?:department|dept|iot|aiml|cse|ece|eee|mech|it)|principal|chairman|dean)\b', query_lower)
+        )
+        if is_leadership_query:
+            where_conditions = []  # Remove ALL dept filters for leadership queries
+            print(f"[RAG ENGINE] Leadership/HOD query detected -- CLEARING dept filters for unbiased search")
+
+        # Build the final where_filter with $and if multiple conditions
+        if len(where_conditions) == 1:
+            where_filter = where_conditions[0]
+        elif len(where_conditions) > 1:
+            where_filter = {"$and": where_conditions}
+        else:
+            where_filter = None
+
         # DYNAMIC TOP_K STRATEGY (Critical for fixing numeric hallucinations)
-        # Fees/Numbers: top_k=1 (Prevent mixing numbers from different chunks)
-        # General: top_k=3 (Standard context)
-        # Complex: top_k=4 (Need more breadth)
-        
         dynamic_k = top_k  # Start with default
         
         if question_type in ['fee', 'numeric']:
             dynamic_k = 5
-            print(f"[RAG ENGINE] 🎯 NUMERIC/FEE QUERY DETECTED: Setting top_k=5 to capture fee data")
+            print(f"[RAG ENGINE] [FEE] NUMERIC/FEE QUERY DETECTED: Setting top_k=5 to capture fee data")
         elif question_type == 'faculty':
             dynamic_k = 10
-            print(f"[RAG ENGINE] 👨‍🏫 Faculty query: Setting top_k=10 for faculty lookup")
+            print(f"[RAG ENGINE] [FACULTY] Faculty query: Setting top_k=10 for faculty lookup")
+        elif question_type == 'principal':
+            dynamic_k = 20
+            print(f"[RAG ENGINE] [PRINCIPAL] Leadership query: Setting top_k=20 to capture faculty tables")
         elif question_type in ['placement', 'about', 'facility']:
             dynamic_k = 8
-            print(f"[RAG ENGINE] Complex query: Setting top_k=8")
+            print(f"[RAG ENGINE] [INFO] Complex query: Setting top_k=8")
         else:
             dynamic_k = 5
-            print(f"[RAG ENGINE] Standard query: Setting top_k=5")
+            print(f"[RAG ENGINE] [STD] Standard query: Setting top_k=5")
             
         # Override if user manually passed top_k, otherwise use dynamic
         final_k = top_k if top_k != self.config['top_k'] else dynamic_k
         
-        # DYNAMIC MIN_SIMILARITY for leadership queries
-        # Lower threshold to 0.25 for principal/chairman queries to ensure retrieval
-        # (semantic matching often weak for "who is the principal" vs table data)
         final_min_similarity = min_similarity
         if question_type in ['principal', 'placement']:
             final_min_similarity = 0.25 if question_type == 'principal' else 0.35
             print(f"[RAG ENGINE] {question_type.title()} query: Lowering min_similarity to {final_min_similarity}")
         
         # Search for relevant content
-        print(f"[RAG ENGINE] Searching index for relevant content (k={final_k})...")
+        print(f"[RAG ENGINE] Searching index for relevant content (k={final_k}, where={where_filter})...")
         try:
-            results = self.index.search(query, top_k=final_k, min_similarity=final_min_similarity)
+            results = self.index.search(query, top_k=final_k, min_similarity=final_min_similarity, where=where_filter)
             print(f"[RAG ENGINE] Found {len(results)} relevant chunks")
             
             # Log what we actually retrieved
@@ -1329,7 +1442,8 @@ class RAGEngine:
                     print(f"  Source: {item.source_name} ({item.source_type})")
                     if item.page_number:
                         print(f"  Page: {item.page_number}")
-                    print(f"  Content snippet: {item.content[:150]}...")
+                    snippet = item.content[:150].encode('ascii', 'ignore').decode('ascii')
+                    print(f"  Content snippet: {snippet}...")
                 print(f"{'='*60}\n")
         except Exception as e:
             print(f"[RAG ENGINE ERROR] Search failed: {e}")
@@ -1386,78 +1500,97 @@ class RAGEngine:
         print(f"[RAG ENGINE] Created {len(citations)} citations")
         
         # ========================================
-        # DIRECT EXTRACTION (for leadership/entity queries)
+        # LLM ANSWER GENERATION
         # ========================================
-        # Try direct pattern extraction BEFORE LLM for factual entity queries
-        # This is more reliable than small LLMs for simple "who is X" questions
-        direct_answer = None
-        if question_type == 'principal':
-            direct_answer = self._extract_leadership_answer(query, results)
+        print(f"[RAG ENGINE] Generating answer via LLM...")
         
-        if direct_answer:
-            print(f"[RAG ENGINE] Direct extraction succeeded — skipping LLM")
-            answer = direct_answer
-            confidence = 0.95  # High confidence for direct extraction
+        # FIRST: Check for hardcoded overrides (e.g. HODs)
+        override_answer = self._get_hardcoded_override(query)
+        
+        if override_answer:
+            print(f"[RAG ENGINE] Using hardcoded override for answer: {override_answer}")
+            answer = override_answer
+            confidence = 1.0
         else:
             # ========================================
-            # LLM ANSWER GENERATION
+            # LEADERSHIP EXTRACTION (BEFORE LLM)
+            # For principal/chairman/dean/hod queries, try direct name extraction
+            # from verified chunks FIRST. This is more reliable than LLM for
+            # structured data like profile pages and governance tables.
             # ========================================
-            print(f"[RAG ENGINE] Generating answer via LLM...")
-            try:
-                llm = self._get_llm()
-                
-                if llm and llm.is_available():
-                    # Use LLM for natural answer synthesis
-                    print(f"[RAG ENGINE] Using {self._llm.model_name} for answer generation...")
-                    
-                    # Get exclude patterns for sentence-level filtering
-                    rules = self.ANSWER_VERIFICATION_RULES.get(question_type, self.DEFAULT_VERIFICATION)
-                    exclude_patterns = rules.get('exclude_patterns', [])
-                    
-                    # Prepare chunks for LLM WITH SENTENCE-LEVEL FILTERING
-                    chunks_for_llm = []
-                    for item, score in results:
-                        content = item.content
-                        
-                        # Apply sentence-level filtering to remove irrelevant noise
-                        if exclude_patterns:
-                            sentences = re.split(r'(?<=[.!?])\s+', content)
-                            filtered = [s for s in sentences if not any(re.search(p, s, re.IGNORECASE) for p in exclude_patterns)]
-                            content = " ".join(filtered)
-                        
-                        if content.strip():
-                            chunks_for_llm.append({
-                                'source_name': item.source_name,
-                                'source_url': item.source_url,
-                                'content': content,
-                                'section': item.metadata.get('section', item.source_name)
-                            })
-                    
-                    # Generate answer with LLM
-                    llm_result = llm.generate_answer(query, chunks_for_llm)
-                    
-                    if llm_result.answer:
-                        answer = llm_result.answer
-                        # High confidence for LLM-generated answers
-                        confidence = 0.85
-                        print(f"[RAG ENGINE] LLM answer generated in {llm_result.generation_time:.2f}s")
-                    else:
-                        # LLM failed - return clean message instead of dumping raw chunks
-                        print(f"[RAG ENGINE] LLM returned empty, returning service message...")
-                        answer = "I found relevant information but the AI service is temporarily busy. Please try again in a moment."
-                        confidence = 0.5
+            if question_type in ['principal', 'leadership']:
+                print(f"[RAG ENGINE] Trying direct leadership extraction for '{question_type}' query...")
+                extracted_answer = self._extract_leadership_answer(query, results)
+                if extracted_answer:
+                    print(f"[RAG ENGINE] Leadership extraction SUCCESS: {extracted_answer[:80]}...")
+                    answer = extracted_answer
+                    confidence = 0.95
                 else:
-                    # Fallback to extraction-based answer
-                    print(f"[RAG ENGINE] LLM not available, using extraction...")
+                    print(f"[RAG ENGINE] Leadership extraction returned None, falling back to LLM...")
+                    extracted_answer = None  # Will fall through to LLM below
+            else:
+                extracted_answer = None
+            
+            # If leadership extraction already provided an answer, skip LLM
+            if question_type in ['principal', 'leadership'] and extracted_answer:
+                pass  # Answer already set above
+            else:
+                # NORMAL LLM EXECUTION
+                try:
+                    llm = self._get_llm()
+                    
+                    if llm and llm.is_available():
+                        # Use LLM for natural answer synthesis
+                        print(f"[RAG ENGINE] Using {self._llm.model_name} for answer generation...")
+                        
+                        # Get exclude patterns for sentence-level filtering
+                        rules = self.ANSWER_VERIFICATION_RULES.get(question_type, self.DEFAULT_VERIFICATION)
+                        exclude_patterns = rules.get('exclude_patterns', [])
+                        
+                        # Prepare chunks for LLM WITH SENTENCE-LEVEL FILTERING
+                        chunks_for_llm = []
+                        for item, score in results:
+                            content = item.content
+                            
+                            # Apply sentence-level filtering to remove irrelevant noise
+                            if exclude_patterns:
+                                sentences = re.split(r'(?<=[.!?])\s+', content)
+                                filtered = [s for s in sentences if not any(re.search(p, s, re.IGNORECASE) for p in exclude_patterns)]
+                                content = " ".join(filtered)
+                            
+                            if content.strip():
+                                chunks_for_llm.append({
+                                    'source_name': item.source_name,
+                                    'source_url': item.source_url,
+                                    'content': content,
+                                    'section': item.metadata.get('section', item.source_name)
+                                })
+                        
+                        # Generate answer with LLM
+                        llm_result = llm.generate_answer(query, chunks_for_llm)
+                        
+                        if llm_result.answer:
+                            answer = llm_result.answer
+                            # High confidence for LLM-generated answers
+                            confidence = 0.85
+                            print(f"[RAG ENGINE] LLM answer generated in {llm_result.generation_time:.2f}s")
+                        else:
+                            # LLM failed - return clean message instead of dumping raw chunks
+                            print(f"[RAG ENGINE] LLM returned empty, returning service message...")
+                            answer = "I found relevant information but the AI service is temporarily busy. Please try again in a moment."
+                            confidence = 0.5
+                    else:
+                        # Fallback to extraction-based answer
+                        print(f"[RAG ENGINE] LLM not available, using extraction...")
+                        answer, confidence = self._generate_answer(query, context, question_type)
+                    
+                    print(f"[RAG ENGINE] Answer generated. Confidence: {confidence:.2f}")
+                except Exception as e:
+                    print(f"[RAG ENGINE ERROR] Answer generation failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Final fallback
                     answer, confidence = self._generate_answer(query, context, question_type)
-                
-                print(f"[RAG ENGINE] Answer generated. Confidence: {confidence:.2f}")
-            except Exception as e:
-                print(f"[RAG ENGINE ERROR] Answer generation failed: {e}")
-                import traceback
-                traceback.print_exc()
-                # Final fallback
-                answer, confidence = self._generate_answer(query, context, question_type)
         
         # If answer generation returned NO_INFO, use type-specific message
         if answer == self.NO_INFO_RESPONSE:

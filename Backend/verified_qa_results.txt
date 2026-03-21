@@ -1,0 +1,72 @@
+==============================================================
+VERIFIED Q&A RESULTS - VNRVJIET RAG System
+Tested on: 2026-02-26
+==============================================================
+
+--------------------------------------------------------------
+Q1: Who is the principal of VNRVJIET?
+Type: principal
+Status: ✅ CORRECT
+Answer: Dr. C. D. Naidu
+Confidence: 0.85
+Source: ChromaDB filter {'$and': [{'dept': 'OTHER'}, {'is_leadership': True}]}
+--------------------------------------------------------------
+
+Q2: Who is the HOD of CSE department?
+Type: principal
+Status: ✅ CORRECT
+Answer: Dr. Vadlana Baby (via semantic verification of the markdown table)
+Confidence: 0.85
+Source: ChromaDB filter {'dept': 'CSE'}, top_k=20
+--------------------------------------------------------------
+
+Q3: Who is the HOD of EEE?
+Type: principal
+Status: ✅ CORRECT (after fix)
+Answer: Dr. Poonam Upadhyay is the Professor and Head of the Department of Electrical & Electronics Engineering (EEE) at VNRVJIET.
+Confidence: 0.85
+Source: Faculty data, LLM: HF Router (meta-llama/Meta-Llama-3-8B-Instruct)
+--------------------------------------------------------------
+
+Q4: What is the fee structure for B.Tech?
+Type: fee
+Status: ✅ CORRECT
+Answer: Tuition fees are approximately ₹1,35,000 per year for B.Tech and ₹1,30,000 per year for M.Tech (as per Telangana Government norms).
+Source: FAQ
+--------------------------------------------------------------
+
+Q5: What is the highest placement package in CSE?
+Type: placement
+Status: ✅ CORRECT (after fix)
+Answer: The highest placement package recorded for CSE students is 51 LPA, offered by Microsoft.
+Confidence: 0.85
+Source: 2024 Batch Placements Highlights
+--------------------------------------------------------------
+
+Q6: How many students were placed in Amazon?
+Type: general
+Status: ✅ CORRECT
+Answer: From the given context, a total of 5 students were placed in Amazon:
+  - 19071A1298 N S AKHILA (44.15 lakhs per annum)
+  - 19071A12E1 KATKAM SATYA SAI GAYATHRI (44.15 lakhs per annum)
+  - 19071A1292 MEDA CHANDANA REDDY (44.15 lakhs per annum)
+  - 19071A1284 GUNDU NEELIMA (44.15 lakhs per annum)
+  - 18071A1208 BILLA APARNA (44.15 lakhs per annum)
+Confidence: 0.85
+Source: Placements_28_6, IT_Placements_2024_2025
+--------------------------------------------------------------
+
+Q7: CSE training and placement department faculty list
+Type: faculty
+Status: ✅ CORRECT (no such data exists)
+Answer: Information not found on the website. Please contact the relevant department.
+Note: This is the correct response - no T&P faculty list exists in the dataset.
+Source: Faculty
+--------------------------------------------------------------
+
+q8: average package of cse
+The average package for CSE students at VNRVJIET is approximately 8.12 LPA, as reported for CSE and allied branches.
+
+q9: What are the placement statistics of cse 2025
+
+q10: 

@@ -1,0 +1,90 @@
+﻿[INDEX] Initializing ChromaDB at C:\VNRVJIET\Projects\ai-chat\Backend\storage\chromadb
+
+[RAG ENGINE] Processing query: 'What is the fee structure for B.Tech?...'
+[RAG ENGINE] Config: top_k=3, min_similarity=0.6
+[RAG ENGINE] Detecting question type for: 'What is the fee structure for B.Tech?'
+[RAG ENGINE] Question type detected: fee
+[RAG ENGINE] [FEE] NUMERIC/FEE QUERY DETECTED: Setting top_k=5 to capture fee data
+[RAG ENGINE] Searching index for relevant content (k=5, where=None)...
+[INDEX SEARCH] Query: 'What is the fee structure for B.Tech?...', top_k=5, where=None
+[EMBED] [*] Initializing embedding model... (one-time setup)
+[EMBED] [OK] Embedding model ready (BAAI/bge-base-en-v1.5)
+.\venv\Scripts\python.exe : 
+At line:1 char:1
++ .\venv\Scripts\python.exe -c "import sys; sys.path.append('.'); from  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]
+Batches: 100%|##########| 1/1 [00:00<00:00,  3.02it/s]
+Batches: 100%|##########| 1/1 [00:00<00:00,  3.02it/s]
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "C:\Users\KARTHIK B\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u20b9' in position 51: character maps to <undefined>
+[RAG ENGINE] Found 5 relevant chunks
+
+============================================================
+RETRIEVED CHUNKS FOR: 'What is the fee structure for B.Tech?...'
+============================================================
+
+[CHUNK 1] Similarity: 0.775
+  Source: Faq (webpage)
+  Content snippet: ## What is the annual tuition fee for B.Tech and M.Tech?
+Tuition fees are approximately 1,35,000 per year for B.Tech and 1,30,000 per year for M.Tec...
+
+[CHUNK 2] Similarity: 0.750
+  Source: Faq (webpage)
+  Content snippet: ## What is the tuition fee for B.Tech and M.Tech programmes at VNRVJIET?
+Tuition fees are as per Government of Telangana norms: approximately 1,35,00...
+
+[CHUNK 3] Similarity: 0.743
+  Source: VNRVJIET (webpage)
+  Content snippet: # International Student Admissions Fee Structure
+| B.Tech Courses | Tuition Fee | Hostel & Food Expenses |
+| CSE, CSM, CSD, CSC, CSB, CSO, AID, IT, EC...
+
+[CHUNK 4] Similarity: 0.722
+  Source: Faq (webpage)
+  Content snippet: ## What is the process for B.Tech admission?
+Admissions are based on entrance exams like TS EAMCET for B.Tech, followed by counseling and verification...
+
+[CHUNK 5] Similarity: 0.717
+  Source: naacssr (pdf)
+  Page: 1
+  Content snippet: ...Academic committee meeting:  Approval of B. Tech course structure and I year B. Tech sylla bus: The course structure and 1 year B. Tech syllabus h...
+============================================================
+
+
+[VERIFICATION] Applying 'fee' verification rules...
+[PRIORITY] 2 real-data chunks + 3 FAQ chunks
+[PRIORITY] Strategy: real data first, FAQ as fallback only
+[VERIFY] Target Program Detected: BTECH
+[VERIFY] Fee query without 'international' keyword - filtering out International/NRI/USD chunks
+[VERIFY FILTER] Removed International fee chunk: VNRVJIET...
+[VERIFY X] Chunk from 'naacssr' REJECTED - no fee content found
+[VERIFY] 0/1 chunks passed verification for 'fee' query
+[PRIORITY] No real-data chunks passed. Falling back to 3 FAQ chunk(s)...
+[PRIORITY FALLBACK] FAQ chunk accepted: Faq
+[PRIORITY FALLBACK] FAQ chunk accepted: Faq
+[PRIORITY] FAQ fallback returned 2 chunk(s)
+[VERIFICATION] OK: 2 chunks passed verification
+[RAG ENGINE] Building context from verified results...
+[RAG ENGINE] Context built: 436 chars
+[RAG ENGINE] Created 1 citations
+[RAG ENGINE] Generating answer via LLM...
+[LLM] [OK] Gemini ready -> gemini-2.0-flash
+[LLM] [OK] OpenRouter ready -> mistralai/mistral-7b-instruct
+[LLM] [OK] HF Router ready -> meta-llama/Meta-Llama-3-8B-Instruct
+[RAG ENGINE] Using gemini-2.0-flash for answer generation...
+[LLM] [WARN] Gemini quota exhausted -- trying next provider
+[LLM] [WARN] OpenRouter (mistralai/mistral-7b-instruct): Error code: 400 - {'error': {'message': 'Provider returned error', 'code': 400, 'metadata': {'raw': '{\n  "id": "oYuJj2S-2kFHot-9d3e7b46c31f6eef",\n  "error": {\n    "message": "Unable to access non-serverless model mistralai/Mistral-7B-Instruct-v0.3. Please visit https://api.together.ai/models/mistralai/Mistral-7B-Instruct-v0.3 to create and start a new dedicated endpoint for the model.",\n    "type": "invalid_request_error",\n    "param": null,\n    "code": "model_not_available"\n  }\n}', 'provider_name': 'Together', 'is_byok': False}}, 'user_id': 'user_3A4Fwh313H0JV3enMApNtXw5OtH'}
+[LLM] [WARN] OpenRouter (upstage/solar-pro-3:free): Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1772150400000'}, 'provider_name': None}}, 'user_id': 'user_3A4Fwh313H0JV3enMApNtXw5OtH'}
+[LLM] [WARN] All OpenRouter models failed -- trying HF...
+[LLM] [OK] Answered by HF Router (meta-llama/Meta-Llama-3-8B-Instruct) in 7.0s
+[RAG ENGINE] LLM answer generated in 7.00s
+[RAG ENGINE] Answer generated. Confidence: 0.85
+[ANSWER]: 

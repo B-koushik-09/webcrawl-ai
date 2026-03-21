@@ -6,6 +6,11 @@ const ChatMessage = ({ message }) => {
     const { role, content, citations, grounded, confidence, error } = message;
     const isBot = role === 'assistant';
 
+    // Filter out FAQ sources from being displayed in the UI
+    const displayCitations = citations ? citations.filter(cite =>
+        !cite.name.toLowerCase().includes('faq')
+    ) : [];
+
     return (
         <div className={`message ${role} ${error ? 'error' : ''}`}>
             <div className="message-avatar">
@@ -39,11 +44,11 @@ const ChatMessage = ({ message }) => {
                         </div>
 
                         {/* Citations / Sources */}
-                        {citations && citations.length > 0 && (
+                        {displayCitations.length > 0 && (
                             <div className="citations-area">
                                 <p className="citations-header">Sources:</p>
                                 <div className="citations-list">
-                                    {citations.map((cite, idx) => (
+                                    {displayCitations.map((cite, idx) => (
                                         <div key={idx} className="citation-item">
                                             <span className="cite-icon">
                                                 {cite.type === 'pdf' ? '📄' : '🌐'}

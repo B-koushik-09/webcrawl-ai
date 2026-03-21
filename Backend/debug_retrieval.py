@@ -1,36 +1,41 @@
-"""
-Debug retrieval to find where 'August 2006' comes from.
-"""
-from modules.embeddings import KnowledgeIndex
-from modules.rag_engine import initialize_rag_engine
+import sys
+from pathlib import Path
 
-def debug_query():
-    # Load index
-    print("Loading index...")
-    index = KnowledgeIndex()
-    if not index.load_index():
-        print("Failed to load index!")
-        return
-        
-    engine = initialize_rag_engine(index)
-    
-    query = "When was VNRVJIET established?"
-    
-    print(f"\nQuery: {query}")
-    print("=" * 60)
-    
-    # 1. Inspect Retrieval
-    print("Retrieving chunks...")
-    results = index.search(query, top_k=10)
-    
-    for i, (item, score) in enumerate(results):
-        print(f"\n[Chunk {i+1}] Score: {score:.3f}")
-        print(f"Source: {item.source_name} ({item.source_type})")
-        print(f"Content:\n{item.content}")
-        print("-" * 40)
-        
-        if "2006" in item.content:
-            print(">>> FOUND '2006' IN THIS CHUNK! <<<")
+sys.path.append(str(Path(__file__).parent))
+from modules.rag_engine import get_rag_engine
+from modules.embeddings import get_knowledge_index
 
-if __name__ == "__main__":
-    debug_query()
+print("Loading index...")
+index = get_knowledge_index()
+index.load_status()
+engine = get_rag_engine()
+engine.set_index(index)
+
+print("\nTesting Query: who is the principal of the college?")
+
+# Let's see what the index actually retrieves before verification
+query = "who is the principal of the college?"
+print(f"\n--- Raw Retrieval from ChromaDB for '{query}' ---")
+
+# Apply the same query expansion as rag_engine
+expanded_query = query
+for rule_pattern, keywords in engine.leadership_keywords.items():
+    import re
+    if re.search(rule_pattern, query, re.IGNORECASE):
+        expanded_query = f"{query} {keywords}"
+        break
+        
+print(f"Expanded query: {expanded_query}")
+
+results = index.search(expanded_query, top_k=5, min_similarity=0.3)
+for i, (item, score) in enumerate(results):
+    print(f"\nResult {i+1} (Score: {score:.3f}):")
+    print(f"Source: {item.source_name} ({item.doc_type})")
+    print(f"Content snippet: {item.content[:200]}...")
+
+print("\n--- Full RAG Engine Execution ---")
+response = engine.query(query)
+print("\nFinal Answer:", response.answer)
+print("Confidence:", response.confidence)
+print("Grounded:", response.grounded)
+print("Citations:", [c.source_name for c in response.citations])

@@ -1,0 +1,23 @@
+Q: What is the highest placement package in CSE?
+Type: placement
+A: The highest placement package recorded for CSE students is **51 LPA**, offered by **Microsoft**.  
+
+[Source: 2024 Batch Placements Highlights]
+----------------------------------------
+Q: How many students were placed in Amazon?
+Type: general
+A: From the given context, a total of 5 students were placed in Amazon. 
+
+- 19071A1298 N S AKHILA (44.15 lakhs per annum)
+- 19071A12E1 KATKAM SATYA SAI GAYATHRI (44.15 lakhs per annum)
+- 19071A1292 MEDA CHANDANA REDDY (44.15 lakhs per annum)
+- 19071A1284 GUNDU NEELIMA (44.15 lakhs per annum)
+- 18071A1208 BILLA APARNA (44.15 lakhs per annum)
+
+[Source: Placements_28_6, IT_Placements_2024_2025, Placements_28_6]
+----------------------------------------
+Q: cse training and placement department faculty list
+Type: faculty
+A: Information not found on the website. Please contact the relevant department.  
+[Source: Faculty]
+----------------------------------------

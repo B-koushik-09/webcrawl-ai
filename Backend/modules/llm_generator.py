@@ -1,9 +1,9 @@
 """
 CollegeWeb AI — LLM Answer Generator
-3-Tier Fallback Chain
-  1. Gemini 2.0 Flash    (Google AI — fastest, best quality, free tier)
-  2. HF Mistral 7B       (Hugging Face Inference Router → Serverless API)
-  3. Ollama qwen2.5:1.5b (Local — offline / demo safety net)
+# 3-Tier Fallback Chain
+#   1. Gemini 2.5 Flash    (Google AI — fastest, best quality, free tier)
+#   2. HF Qwen2.5-72B     (Hugging Face Inference Router → Serverless API, free)
+#   3. Ollama qwen2.5:1.5b (Local — offline / demo safety net)
 
 Each tier is tried in order. If all fail, a retrieval-only answer is returned.
 """
@@ -53,12 +53,13 @@ class GeneratedAnswer:
 
 class LLMGenerator:
     """
-    Unified LLM generator with 3-tier fallback.
+    Unified LLM generator with 4-tier fallback.
 
     Priority:
       1. Gemini 2.0 Flash   (GEMINI_API_KEY)
-      2. HF Mistral 7B      (HF_TOKEN)  — Router first, Serverless second
-      3. Ollama local       (no key required)
+      2. OpenRouter         (OPENROUTER_API_KEY)
+      3. HF Qwen2.5-72B     (HF_TOKEN)  — Router first, Serverless second
+      4. Ollama local       (no key required)
     """
 
     # ── System prompt shared across all providers ──────────────────────────
@@ -67,43 +68,52 @@ class LLMGenerator:
         "and Technology (VNRVJIET).\n\n"
         "RULES:\n"
         "1. Answer ONLY using information from the CONTEXT provided. Do NOT use outside knowledge.\n"
-        "2. If the context does not contain the answer, say you couldn't find specific details and "
-        "suggest contacting the relevant college department.\n"
-        "3. Provide a detailed, well-written paragraph. Include all relevant facts, numbers, names.\n"
-        "4. Quote exact numbers, names, dates, and facts directly from the context.\n"
-        "5. Use bullet points when the question asks about multiple items.\n"
-        "6. Always cite sources at the end like [Source: Page Title].\n"
-        "7. Do NOT make up or infer information not in the context.\n"
-        "8. Do NOT confuse table row numbers (S.No) with counts of items.\n"
-        "9. For fee questions: prioritize Domestic fees unless asked about NRI/International."
+        "2. Write the answer in your own words. Do NOT copy sentences directly from the context.\n"
+        "3. Be concise and clear. Include only the facts needed to answer the question.\n"
+        "4. If specific numbers, names, or dates are present, include them accurately.\n"
+        "5. If the context does not contain the answer, say: "
+        "\"Information not found on the website. Please contact the relevant department.\"\n"
+        "6. Use bullet points only if the question asks for a list.\n"
+        "7. Always cite the source at the end like [Source: Page Title].\n"
+        "8. Do NOT confuse table row numbers (S.No) with counts.\n"
+        "9. For fee questions: prioritize Domestic fees unless asked about NRI/International.\n"
+        "10. For HOD/Head queries: only state someone is an HOD if they have 'Head' or 'HOD' "
+        "in their Designation or Profile. Do not infer HOD status from just being a Professor.\n\n"
+        "If your answer repeats long phrases from the context, rewrite it more concisely."
     )
 
-    # Mistral instruct wrapper (used for Serverless Inference API path)
-    _MISTRAL_TMPL = "<s>[INST] {system}\n\nCONTEXT:\n{context}\n\nQUESTION: {query} [/INST]"
+    # ChatML template (used for Serverless Inference API path, works for most modern models)
+    _CHATML_TMPL = "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\nCONTEXT:\n{context}\n\nQUESTION: {query}<|im_end|>\n<|im_start|>assistant\n"
 
     # ── Init ───────────────────────────────────────────────────────────────
 
     def __init__(self, model_name: Optional[str] = None):
-        self.gemini_key  = os.getenv("GEMINI_API_KEY")
-        self.hf_token    = os.getenv("HF_TOKEN")
-        self.ollama_url  = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        self.gemini_key      = os.getenv("GEMINI_API_KEY")
+        self.openrouter_key  = os.getenv("OPENROUTER_API_KEY")
+        self.hf_token        = os.getenv("HF_TOKEN")
+        self.ollama_url      = os.getenv("OLLAMA_URL", "http://localhost:11434")
 
         cfg = LLM_CONFIG
-        self.hf_model    = model_name or cfg.get("hf_model",     "mistralai/Mistral-7B-Instruct-v0.2")
-        self.gemini_model= cfg.get("gemini_model", "gemini-2.0-flash")
-        self.ollama_model= cfg.get("ollama_model", "qwen2.5:1.5b")
+        self.openrouter_model    = cfg.get("openrouter_model", "mistralai/mistral-7b-instruct")
+        self.openrouter_fallback = cfg.get("openrouter_fallback", "upstage/solar-pro-3:free")
+        self.hf_model            = model_name or cfg.get("hf_model", "meta-llama/Meta-Llama-3-8B-Instruct")
+        self.hf_fallback         = cfg.get("hf_fallback", "mistralai/Mistral-7B-Instruct-v0.3")
+        self.gemini_model        = cfg.get("gemini_model", "gemini-2.5-flash")
+        self.ollama_model        = cfg.get("ollama_model", "qwen2.5:1.5b")
         self.temperature = cfg.get("temperature",  0.1)
         self.max_tokens  = cfg.get("max_tokens",   1024)
 
         # Keep a .model_name alias (used by RAG engine for logging)
         self.model_name  = self.gemini_model
 
+        self._openrouter_client      = None
         self._hf_client              = None
         self._gemini_mdl             = None
         self._gemini_client          = None
         self._gemini_quota_exhausted = False  # set True on 429; skip for rest of session
 
         self._init_gemini()
+        self._init_openrouter()
         self._init_hf_router()
 
     def _init_gemini(self):
@@ -116,11 +126,24 @@ class LLMGenerator:
         try:
             self._gemini_client = google_genai.Client(api_key=self.gemini_key)
             self._gemini_mdl = True  # flag: client is ready
-            print(f"[LLM] ✅ Gemini ready → {self.gemini_model}")
+            print(f"[LLM] [OK] Gemini ready -> {self.gemini_model}")
         except Exception as e:
             print(f"[LLM] Gemini init failed: {e}")
             self._gemini_mdl = None
             self._gemini_client = None
+
+    def _init_openrouter(self):
+        if not OPENAI_AVAILABLE or not self.openrouter_key:
+            return
+        try:
+            self._openrouter_client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=self.openrouter_key,
+            )
+            print(f"[LLM] [OK] OpenRouter ready -> {self.openrouter_model}")
+        except Exception as e:
+            print(f"[LLM] OpenRouter init failed: {e}")
+            self._openrouter_client = None
 
     def _init_hf_router(self):
         if not OPENAI_AVAILABLE or not self.hf_token:
@@ -130,7 +153,7 @@ class LLMGenerator:
                 base_url="https://router.huggingface.co/v1",
                 api_key=self.hf_token,
             )
-            print(f"[LLM] ✅ HF Router ready → {self.hf_model}")
+            print(f"[LLM] [OK] HF Router ready -> {self.hf_model}")
         except Exception as e:
             print(f"[LLM] HF Router init failed: {e}")
             self._hf_client = None
@@ -148,7 +171,7 @@ class LLMGenerator:
             try:
                 answer = self._call_gemini(query, context_text)
                 if answer:
-                    print(f"[LLM] ✅ Answered by Gemini in {time.time()-t0:.1f}s")
+                    print(f"[LLM] [OK] Answered by Gemini in {time.time()-t0:.1f}s")
                     return GeneratedAnswer(
                         answer=self._clean(answer),
                         model=self.gemini_model,
@@ -161,51 +184,75 @@ class LLMGenerator:
                 errors.append(err)
                 if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                     self._gemini_quota_exhausted = True
-                    print("[LLM] ⚠ Gemini quota exhausted — using HF Mistral for this session")
+                    print(f"[LLM] [WARN] Gemini quota exhausted -- trying next provider")
                 else:
-                    print(f"[LLM] ⚠ {err} — trying HF Mistral...")
+                    print(f"[LLM] [WARN] {err} -- trying OpenRouter...")
 
-        # ── Tier 2a: HF Router (Mistral) ─────────────────────────────────
-        if self._hf_client:
-            try:
-                answer = self._call_hf_router(query, context_text)
-                if answer:
-                    print(f"[LLM] ✅ Answered by HF Router (Mistral) in {time.time()-t0:.1f}s")
-                    return GeneratedAnswer(
-                        answer=self._clean(answer),
-                        model=self.hf_model,
-                        provider="huggingface-router",
-                        citations_used=citations,
-                        generation_time=time.time() - t0,
-                    )
-            except Exception as e:
-                err = f"HF Router: {e}"
-                errors.append(err)
-                print(f"[LLM] ⚠ {err} — trying HF Serverless API...")
+        # ── Tier 2: OpenRouter (primary → fallback) ────────────────────────
+        if self._openrouter_client:
+            for or_model in [self.openrouter_model, self.openrouter_fallback]:
+                try:
+                    answer = self._call_openrouter(query, context_text, model=or_model)
+                    if answer:
+                        print(f"[LLM] [OK] Answered by OpenRouter ({or_model}) in {time.time()-t0:.1f}s")
+                        return GeneratedAnswer(
+                            answer=self._clean(answer),
+                            model=or_model,
+                            provider="openrouter",
+                            citations_used=citations,
+                            generation_time=time.time() - t0,
+                        )
+                except Exception as e:
+                    err = f"OpenRouter ({or_model}): {e}"
+                    errors.append(err)
+                    print(f"[LLM] [WARN] {err}")
+            print(f"[LLM] [WARN] All OpenRouter models failed -- trying HF...")
 
-        # ── Tier 2b: HF Serverless Inference API (Mistral) ───────────────
-        if self.hf_token:
-            try:
-                answer = self._call_hf_serverless(query, context_text)
-                if answer:
-                    print(f"[LLM] ✅ Answered by HF Serverless (Mistral) in {time.time()-t0:.1f}s")
-                    return GeneratedAnswer(
-                        answer=self._clean(answer),
-                        model=self.hf_model,
-                        provider="huggingface-serverless",
-                        citations_used=citations,
-                        generation_time=time.time() - t0,
-                    )
-            except Exception as e:
-                err = f"HF Serverless: {e}"
-                errors.append(err)
-                print(f"[LLM] ⚠ {err} — trying Ollama...")
+        # ── Tier 3: HuggingFace (primary → fallback) ───────────────────────
+        hf_models = [self.hf_model, self.hf_fallback]
+        for hf_model in hf_models:
+            # Try HF Router first
+            if self._hf_client:
+                try:
+                    answer = self._call_hf_router(query, context_text, model=hf_model)
+                    if answer:
+                        print(f"[LLM] [OK] Answered by HF Router ({hf_model}) in {time.time()-t0:.1f}s")
+                        return GeneratedAnswer(
+                            answer=self._clean(answer),
+                            model=hf_model,
+                            provider="huggingface-router",
+                            citations_used=citations,
+                            generation_time=time.time() - t0,
+                        )
+                except Exception as e:
+                    err = f"HF Router ({hf_model}): {e}"
+                    errors.append(err)
+                    print(f"[LLM] [WARN] {err}")
+            # Try HF Serverless API
+            if self.hf_token:
+                try:
+                    answer = self._call_hf_serverless(query, context_text, model=hf_model)
+                    if answer:
+                        print(f"[LLM] [OK] Answered by HF Serverless ({hf_model}) in {time.time()-t0:.1f}s")
+                        return GeneratedAnswer(
+                            answer=self._clean(answer),
+                            model=hf_model,
+                            provider="huggingface-serverless",
+                            citations_used=citations,
+                            generation_time=time.time() - t0,
+                        )
+                except Exception as e:
+                    err = f"HF Serverless ({hf_model}): {e}"
+                    errors.append(err)
+                    print(f"[LLM] [WARN] {err}")
+        if hf_models:
+            print(f"[LLM] [WARN] All HF models failed -- trying Ollama...")
 
-        # ── Tier 3: Ollama (local) ────────────────────────────────────────
+        # ── Tier 4: Ollama (local) ────────────────────────────────────────
         try:
             answer = self._call_ollama(query, context_text)
             if answer:
-                print(f"[LLM] ✅ Answered by Ollama ({self.ollama_model}) in {time.time()-t0:.1f}s")
+                print(f"[LLM] [OK] Answered by Ollama ({self.ollama_model}) in {time.time()-t0:.1f}s")
                 return GeneratedAnswer(
                     answer=self._clean(answer),
                     model=self.ollama_model,
@@ -216,10 +263,10 @@ class LLMGenerator:
         except Exception as e:
             err = f"Ollama: {e}"
             errors.append(err)
-            print(f"[LLM] ⚠ {err} — all providers exhausted")
+            print(f"[LLM] [WARN] {err} -- all providers exhausted")
 
         # ── All failed: retrieval-only answer ─────────────────────────────
-        print(f"[LLM] ❌ All LLM providers failed: {'; '.join(errors)}")
+        print(f"[LLM] [FAIL] All LLM providers failed: {'; '.join(errors)}")
         if context_chunks:
             fallback = (
                 "Here is the most relevant information I found:\n\n"
@@ -241,7 +288,7 @@ class LLMGenerator:
 
     def is_available(self) -> bool:
         """True if at least one provider is configured."""
-        return bool(self._gemini_mdl or self.hf_token or True)  # Ollama always last resort
+        return bool(self._gemini_mdl or self.openrouter_key or self.hf_token or True)  # Ollama always last resort
 
     # ── Provider implementations ───────────────────────────────────────────
 
@@ -262,10 +309,29 @@ class LLMGenerator:
         )
         return response.text
 
-    def _call_hf_router(self, query: str, context: str) -> str:
+    def _call_openrouter(self, query: str, context: str, model: str = None) -> str:
+        """OpenRouter via OpenAI-compatible SDK."""
+        use_model = model or self.openrouter_model
+        completion = self._openrouter_client.chat.completions.create(
+            model=use_model,
+            messages=[
+                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {"role": "user",   "content": f"CONTEXT:\n{context}\n\nQUESTION: {query}"},
+            ],
+            extra_headers={
+                "HTTP-Referer": "https://vnrvjiet.ac.in",
+                "X-Title": "CollegeWeb AI",
+            },
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+        )
+        return completion.choices[0].message.content
+
+    def _call_hf_router(self, query: str, context: str, model: str = None) -> str:
         """Hugging Face Inference Router via OpenAI-compatible SDK."""
+        use_model = model or self.hf_model
         completion = self._hf_client.chat.completions.create(
-            model=self.hf_model,
+            model=use_model,
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {"role": "user",   "content": f"CONTEXT:\n{context}\n\nQUESTION: {query}"},
@@ -275,35 +341,33 @@ class LLMGenerator:
         )
         return completion.choices[0].message.content
 
-    def _call_hf_serverless(self, query: str, context: str) -> str:
-        """HF Serverless Inference API — direct requests.post (free tier)."""
-        prompt = self._MISTRAL_TMPL.format(
-            system=self.SYSTEM_PROMPT,
-            context=context,
-            query=query,
-        )
-        url = f"https://api-inference.huggingface.co/models/{self.hf_model}"
+    def _call_hf_serverless(self, query: str, context: str, model: str = None) -> str:
+        """HF Serverless Inference API — /v1/chat/completions (free tier)."""
+        use_model = model or self.hf_model
+        url = f"https://api-inference.huggingface.co/v1/chat/completions"
         resp = requests.post(
             url,
-            headers={"Authorization": f"Bearer {self.hf_token}"},
+            headers={
+                "Authorization": f"Bearer {self.hf_token}",
+                "Content-Type": "application/json",
+            },
             json={
-                "inputs": prompt,
-                "parameters": {
-                    "max_new_tokens": self.max_tokens,
-                    "temperature": self.temperature,
-                    "do_sample": True,
-                    "return_full_text": False,
-                },
+                "model": use_model,
+                "messages": [
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "user",   "content": f"CONTEXT:\n{context}\n\nQUESTION: {query}"},
+                ],
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
             },
             timeout=60,
         )
         resp.raise_for_status()
         data = resp.json()
-        if isinstance(data, list) and data:
-            return data[0].get("generated_text", "")
-        if isinstance(data, dict):
-            return data.get("generated_text", "")
-        raise ValueError(f"Unexpected response: {data}")
+        # /v1/chat/completions format
+        if isinstance(data, dict) and "choices" in data:
+            return data["choices"][0]["message"]["content"]
+        raise ValueError(f"Unexpected HF response: {data}")
 
     def _call_ollama(self, query: str, context: str) -> str:
         """Ollama local inference — no API key required."""
@@ -370,9 +434,9 @@ if __name__ == "__main__":
     load_dotenv()
 
     gen = LLMGenerator()
-    print(f"\nGemini  : {'✅' if gen._gemini_mdl else '❌'} ({gen.gemini_model})")
-    print(f"HF Token: {'✅' if gen.hf_token else '❌'} ({gen.hf_model})")
-    print(f"Ollama  : 🔄 {gen.ollama_url} ({gen.ollama_model})")
+    print(f"\nGemini  : {'[OK]' if gen._gemini_mdl else '[FAIL]'} ({gen.gemini_model})")
+    print(f"HF Token: {'[OK]' if gen.hf_token else '[FAIL]'} ({gen.hf_model})")
+    print(f"Ollama  : [READY] {gen.ollama_url} ({gen.ollama_model})")
 
     ctx = [
         {

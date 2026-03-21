@@ -54,12 +54,15 @@ const ChatInterface = () => {
     };
     useEffect(scrollToBottom, [messages]);
 
-    // ── Load suggestions ──────────────────────────────────────────────────────
+    // ── Verified suggestion questions ──────────────────────────────────────────
     useEffect(() => {
-        fetch('http://localhost:5000/api/chat/suggestions')
-            .then(res => res.json())
-            .then(data => setSuggestions(data.suggestions))
-            .catch(err => console.error('Failed to load suggestions', err));
+        setSuggestions([
+            "Who is the principal of VNRVJIET?",
+            "Who is the HOD of CSE department?",
+            "What is the fee structure for B.Tech?",
+            "What is the highest placement package in CSE?",
+            "What is the average package of CSE?"
+        ]);
     }, []);
 
     // ── Send message ──────────────────────────────────────────────────────────
@@ -140,7 +143,7 @@ const ChatInterface = () => {
                 <div className="suggestions-container">
                     <p className="suggestions-title">Try asking about:</p>
                     <div className="suggestions-grid">
-                        {suggestions.slice(0, 4).map((s, i) => (
+                        {suggestions.map((s, i) => (
                             <button key={i} className="suggestion-chip" onClick={() => sendMessage(s)}>
                                 {s}
                             </button>

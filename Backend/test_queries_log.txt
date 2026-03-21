@@ -1,0 +1,240 @@
+[*] Loading existing ChromaDB index...
+[INDEX] Initializing ChromaDB at c:\VNRVJIET\Projects\ai-chat\Backend\storage\chromadb
+[OK] ChromaDB has 13744 chunks loaded
+
+============================================================
+Q: Who is the principal of VNRVJIET?
+============================================================
+
+[RAG ENGINE] Processing query: 'Who is the principal of VNRVJIET?...'
+[RAG ENGINE] Config: top_k=3, min_similarity=0.6
+[RAG ENGINE] Leadership query expansion: added 'principal member secretary Dr. C. D. Naidu institution head'
+[RAG ENGINE] Detecting question type for: 'Who is the principal of VNRVJIET? principal member secretary Dr. C. D. Naidu institution head'
+[RAG ENGINE] Question type detected: principal
+[RAG ENGINE] Leadership query detected -- using ChromaDB filter 'is_leadership': True
+[RAG ENGINE] [STD] Standard query: Setting top_k=5
+[RAG ENGINE] Principal query: Lowering min_similarity to 0.25
+[RAG ENGINE] Searching index for relevant content (k=5, where={'$and': [{'dept': 'OTHER'}, {'is_leadership': True}]})...
+[INDEX SEARCH] Query: 'Who is the principal of VNRVJIET? principal member...', top_k=5, where={'$and': [{'dept': 'OTHER'}, {'is_leadership': True}]}
+[EMBED] [*] Initializing embedding model... (one-time setup)
+[EMBED] [OK] Embedding model ready (BAAI/bge-base-en-v1.5)
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|##########| 1/1 [00:00<00:00,  1.42it/s]Batches: 100%|##########| 1/1 [00:00<00:00,  1.42it/s]
+[RAG ENGINE] Found 5 relevant chunks
+
+============================================================
+RETRIEVED CHUNKS FOR: 'Who is the principal of VNRVJIET? principal member secretary...'
+============================================================
+
+[CHUNK 1] Similarity: 0.793
+  Source: VNRVJIET (webpage)
+  Content snippet: ...Representation | Name | E-mail ID |
+| 1 | Chairman | Head of the Institute | Dr. C.D. Naidu Principal of VNRVJIET | [principal@vnrvjiet.ac.in](mail...
+
+[CHUNK 2] Similarity: 0.741
+  Source: VNRVJIET (webpage)
+  Content snippet: ...ary@vignanajyothi.com) |
+| 3 | Members | Senior administrative officers | Dr. B. Chennakesava Rao, Director forAdvancement &Dean<br> Administration...
+
+[CHUNK 3] Similarity: 0.731
+  Source: VNRVJIET (webpage)
+  Content snippet: # VNRVJIET
+
+**Source:** https://vnrvjiet.ac.in/deputy-dean-administration/
+
+---...
+
+[CHUNK 4] Similarity: 0.715
+  Source: VNRVJIET (webpage)
+  Content snippet: # VNRVJIET
+
+**Source:** https://vnrvjiet.ac.in/principal/
+
+---...
+
+[CHUNK 5] Similarity: 0.704
+  Source: VNRVJIET (webpage)
+  Content snippet: # Profile
+Dr. C. D. Naidu graduated in B.Tech. from JNTUA college of
+Engineering, Ananthapur in Electronics & Communication Engineering and
+Post Gradu...
+============================================================
+
+
+[VERIFICATION] Applying 'principal' verification rules...
+[VERIFY OK] Chunk from 'VNRVJIET' matches pattern: (?:principal|director|dean|hod)\s*:?\s*(...
+[VERIFY OK] Chunk from 'VNRVJIET' matches pattern: (?:principal|director|dean|hod)\s*:?\s*(...
+[VERIFY OK] Chunk from 'VNRVJIET' matches pattern: (?:principal|director|dean|hod)\s*:?\s*(...
+[VERIFY OK] Chunk from 'VNRVJIET' matches pattern: (?:principal|director|dean|hod)\s*:?\s*(...
+[VERIFY OK] Chunk from 'VNRVJIET' matches pattern: (?:dr\.?|prof\.?|mr\.?|mrs\.?|ms\.?|sri|...
+[VERIFY] Chunks re-sorted by boosted scores
+[VERIFY] 5/5 chunks passed verification for 'principal' query
+[VERIFICATION] OK: 5 chunks passed verification
+[RAG ENGINE] Building context from verified results...
+[RAG ENGINE] Context built: 2303 chars
+[RAG ENGINE] Created 4 citations
+[RAG ENGINE] Generating answer via LLM...
+[LLM] [OK] Gemini ready -> gemini-2.5-flash
+[RAG ENGINE] Using gemini-2.5-flash for answer generation...
+[LLM] [WARN] Gemini: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}} -- trying HF Mistral...
+[LLM] [WARN] Ollama: HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/generate (Caused by NewConnectionError("HTTPConnection(host='localhost', port=11434): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it")) -- all providers exhausted
+[LLM] [FAIL] All LLM providers failed: Gemini: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}; Ollama: HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/generate (Caused by NewConnectionError("HTTPConnection(host='localhost', port=11434): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))
+[RAG ENGINE] LLM answer generated in 4.27s
+[RAG ENGINE] Answer generated. Confidence: 0.85
+
+A: Here is the most relevant information I found:
+
+• ...Representation | Name | E-mail ID |
+| 1 | Chairman | Head of the Institute | Dr. C.D. Naidu Principal of VNRVJIET | [principal@vnrvjiet.ac.in](mailto:principal@vnrvjiet.ac.in) |
+| 2 | Member | Member from management | Sri, Kode Durga Prasad-IPS (Retd), General Secretary–Vignana Jyothi | [generalsecretary@vignanajyothi.com](mailto:generalsecretary@vignanajyothi.com) |
+| 3 | Members | Senior admi
+
+• ...ary@vignanajyothi.com) |
+| 3 | Members | Senior administrative officers | Dr. B. Chennakesava Rao, Director forAdvancement &Dean<br> Administration | [directoradvancement @\<br> vnrvjiet.in](mailto:directoradvancement @ vnrvjiet.in) |
+| 4 | Members | Teachers to represent all levels | Dr. K.
+
+• # VNRVJIET
+
+**Source:** https://vnrvjiet.ac.in/deputy-dean-administration/
+
+---
+Confidence: 0.85
+Sources: ['VNRVJIET', 'VNRVJIET', 'VNRVJIET']
+
+============================================================
+Q: Who is the HOD of CSE department?
+============================================================
+
+[RAG ENGINE] Processing query: 'Who is the HOD of CSE department?...'
+[RAG ENGINE] Config: top_k=3, min_similarity=0.6
+[RAG ENGINE] Detecting question type for: 'Who is the HOD of CSE department?'
+[RAG ENGINE] Question type detected: principal
+[RAG ENGINE] [CSE] CSE PRIORITY DETECTED -- using ChromaDB filter 'dept': 'CSE'
+[RAG ENGINE] Leadership query detected -- using ChromaDB filter 'is_leadership': True
+[RAG ENGINE] [STD] Standard query: Setting top_k=5
+[RAG ENGINE] Principal query: Lowering min_similarity to 0.25
+[RAG ENGINE] Searching index for relevant content (k=5, where={'$and': [{'dept': 'CSE'}, {'is_leadership': True}]})...
+[INDEX SEARCH] Query: 'Who is the HOD of CSE department?...', top_k=5, where={'$and': [{'dept': 'CSE'}, {'is_leadership': True}]}
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|##########| 1/1 [00:00<00:00, 16.43it/s]
+[RAG ENGINE] Found 5 relevant chunks
+
+============================================================
+RETRIEVED CHUNKS FOR: 'Who is the HOD of CSE department?...'
+============================================================
+
+[CHUNK 1] Similarity: 0.660
+  Source: VNRVJIET (webpage)
+  Content snippet: ...run K. Pujari, Advisor and Professor Emeritus, Dept of CSE,
+  - 15) Dr. M. V. V. Vidya Sagar, President, Electronics Group, HBL
+  - 16) Dr. C. Ragh...
+
+[CHUNK 2] Similarity: 0.648
+  Source: VNRVJIET (webpage)
+  Content snippet: ...2.49 lakhs funded by**
+**industries, AICTE, UGC, DST and DRDO, MSME, SERB, ISRO. The RDC**
+**is supported by eminent director Dr. A. Subhananda Rao...
+
+[CHUNK 3] Similarity: 0.634
+  Source: VNRVJIET (webpage)
+  Content snippet: ...signation |
+| 1 | Dr. E. Venkata Ramana, Professor, ME | Chairman |
+| 2 | Dr. K. Balashowry, Professor, ME | Member |
+| 3 | Dr. Shaik Amjad, Profes...
+
+[CHUNK 4] Similarity: 0.632
+  Source: VNRVJIET (webpage)
+  Content snippet: ...7) Dr. Kamal C. Vora, Professor Emeritus, Department of Mechanical
+  - 8) Dr. G. Radha Krishna Acharya, Professor (Retd.), NITW & IIITDMK
+  - 9) Dr...
+
+[CHUNK 5] Similarity: 0.568
+  Source: Index (webpage)
+  Content snippet: ...# Cleaned Pages Index | # | File | Title | Original | Cleaned | Reduction |
+|---|------|-------|----------|---------|----------|
+| 1 | [001_academi...
+============================================================
+
+
+[VERIFICATION] Applying 'principal' verification rules...
+[VERIFY BOOST] FAQ source boosted: Index... +0.15
+[VERIFY OK] Chunk from 'Index' matches pattern: (?:principal|director|dean|hod)\s*:?\s*(...
+[VERIFY OK] Chunk from 'VNRVJIET' matches pattern: (?:principal|director|dean|hod)\s*:?\s*(...
+[VERIFY OK] Chunk from 'VNRVJIET' matches pattern: (?:principal|director|dean|hod)\s*:?\s*(...
+[VERIFY OK] Chunk from 'VNRVJIET' matches pattern: (?:dr\.?|prof\.?|mr\.?|mrs\.?|ms\.?|sri|...
+[VERIFY OK] Chunk from 'VNRVJIET' matches pattern: (?:dr\.?|prof\.?|mr\.?|mrs\.?|ms\.?|sri|...
+[VERIFY] Chunks re-sorted by boosted scores
+[VERIFY] 5/5 chunks passed verification for 'principal' query
+[VERIFICATION] OK: 5 chunks passed verification
+[RAG ENGINE] Building context from verified results...
+[RAG ENGINE] Context built: 11754 chars
+[RAG ENGINE] Created 3 citations
+[RAG ENGINE] Generating answer via LLM...
+[RAG ENGINE] Using gemini-2.5-flash for answer generation...
+[LLM] [WARN] Gemini: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}} -- trying HF Mistral...
+[LLM] [WARN] Ollama: HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/generate (Caused by NewConnectionError("HTTPConnection(host='localhost', port=11434): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it")) -- all providers exhausted
+[LLM] [FAIL] All LLM providers failed: Gemini: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}; Ollama: HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/generate (Caused by NewConnectionError("HTTPConnection(host='localhost', port=11434): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))
+[RAG ENGINE] LLM answer generated in 4.23s
+[RAG ENGINE] Answer generated. Confidence: 0.85
+
+A: Here is the most relevant information I found:
+
+• ...# Cleaned Pages Index | # | File | Title | Original | Cleaned | Reduction |
+|---|------|-------|----------|---------|----------|
+| 1 | [001_academics.md](./001_academics.md) | VNRVJIET | 96,106 | 45,782 | 52% |
+| 2 | [002_academics.md](./002_academics.md) | VNRVJIET | 38,337 | 15,951 | 58% |
+| 3 | [003_art-of-living.md](./003_art-of-living.md) | VNRVJIET | 22,983 | 1,513 | 93% |
+| 4 | [004_ece.
+
+• ...run K. Pujari, Advisor and Professor Emeritus, Dept of CSE,
+  - 15) Dr. M. V. V. Vidya Sagar, President, Electronics Group, HBL
+  - 16) Dr. C. Raghavendra Rao, Senior Professor, SCIS, University of
+  - 17) Dr. S. Sireesh, Professor Department of Civil Engineering, IIT
+  - 18) Dr. C.D. Naidu, Principal, VNRVJIET. - 19) Dr. B. Chenna Kesava Rao, Director-Advancement, VNRVJIET. - 20) Dr. A. Subhan
+
+• ...2.49 lakhs funded by**
+**industries, AICTE, UGC, DST and DRDO, MSME, SERB, ISRO. The RDC**
+**is supported by eminent director Dr. A. Subhananda Rao, Retired**
+**Scientist, DRDO and Dr. B. Chennakeshava Rao, Director for**
+**Advancement and Dean Administration. The RDC is headed by Dr. G.**
+**Ramesh Chandra, Professor, Department of CSE.**
+Confidence: 0.85
+Sources: ['Index', 'VNRVJIET', 'VNRVJIET']
+
+============================================================
+Q: What are the fees for B.Tech?
+============================================================
+
+[RAG ENGINE] Processing query: 'What are the fees for B.Tech?...'
+[RAG ENGINE] Config: top_k=3, min_similarity=0.6
+[RAG ENGINE] Detecting question type for: 'What are the fees for B.Tech?'
+[RAG ENGINE] Question type detected: general
+[RAG ENGINE] [STD] Standard query: Setting top_k=5
+[RAG ENGINE] Searching index for relevant content (k=5, where=None)...
+[INDEX SEARCH] Query: 'What are the fees for B.Tech?...', top_k=5, where=None
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|##########| 1/1 [00:00<00:00, 14.72it/s]
+[RAG ENGINE] Found 5 relevant chunks
+
+============================================================
+RETRIEVED CHUNKS FOR: 'What are the fees for B.Tech?...'
+============================================================
+
+[CHUNK 1] Similarity: 0.837
+  Source: Faq (webpage)
+[RAG ENGINE ERROR] Search failed: 'charmap' codec can't encode character '\u20b9' in position 108: character maps to <undefined>
+Traceback (most recent call last):
+  File "c:\VNRVJIET\Projects\ai-chat\Backend\modules\rag_engine.py", line 1246, in query
+    print(f"  Content snippet: {item.content[:150]}...")
+  File "C:\Users\KARTHIK B\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u20b9' in position 108: character maps to <undefined>
+Traceback (most recent call last):
+  File "c:\VNRVJIET\Projects\ai-chat\Backend\test_queries.py", line 24, in <module>
+    res = engine.query(q)
+          ^^^^^^^^^^^^^^^
+  File "c:\VNRVJIET\Projects\ai-chat\Backend\modules\rag_engine.py", line 1246, in query
+    print(f"  Content snippet: {item.content[:150]}...")
+  File "C:\Users\KARTHIK B\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u20b9' in position 108: character maps to <undefined>
+Done. 

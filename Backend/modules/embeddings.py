@@ -1,21 +1,19 @@
 """
 CollegeWeb AI - Knowledge Indexing Module
-Converts content into vector embeddings and stores in FAISS.
+Converts content into vector embeddings and stores in ChromaDB.
 Persistent storage implementation.
 """
 import os
 import json
-import pickle
+import uuid
 import threading
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
 
 import numpy as np
-import faiss
-from sentence_transformers import SentenceTransformer
-from tqdm import tqdm
+import chromadb
 
 # Import text cleaner with repetition-based noise detection
 from modules.text_cleaner import clean_webpage_text, build_noise_lines, clean_markdown
@@ -23,7 +21,7 @@ from modules.text_cleaner import clean_webpage_text, build_noise_lines, clean_ma
 # Import CSE department keywords for chunk classification
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
-from config import CSE_DEPT_KEYWORDS
+from config import CSE_DEPT_KEYWORDS, CSE_SUB_DEPT_KEYWORDS
 
 # Storage paths
 STORAGE_DIR = Path(__file__).parent.parent / "storage"
@@ -33,7 +31,7 @@ STORAGE_DIR.mkdir(exist_ok=True)
 @dataclass
 class KnowledgeItem:
     """Represents a piece of knowledge in the index."""
-    id: int
+    id: str  # Kept as str for ChromaDB compatibility
     content: str
     source_type: str  # 'webpage' or 'pdf'
     source_url: str   # URL or file path
@@ -45,10 +43,9 @@ class KnowledgeItem:
 
 class KnowledgeIndex:
     """
-    Vector-based knowledge index using FAISS and Sentence Transformers.
-    All data is persisted to disk for survival across restarts.
+    Vector-based knowledge index using ChromaDB and Sentence Transformers.
+    All data is persisted to disk natively by ChromaDB.
     """
-    
     
     def __init__(self):
         # Model is lazy-loaded on first use to keep startup fast
@@ -63,27 +60,33 @@ class KnowledgeIndex:
         self.chunk_overlap = 80
         
         # Storage paths
-        self.index_path = STORAGE_DIR / "knowledge.faiss"
-        self.meta_path = STORAGE_DIR / "metadata.pkl"
+        self.chroma_path = STORAGE_DIR / "chromadb"
         self.status_path = STORAGE_DIR / "index_status.json"
-
-        # Knowledge items storage
-        self.items: List[KnowledgeItem] = []
-        self.index = None
+        
+        print(f"[INDEX] Initializing ChromaDB at {self.chroma_path}")
+        self.client = chromadb.PersistentClient(path=str(self.chroma_path))
+        
+        # Use Cosine Similarity for the vector space
+        self.collection = self.client.get_or_create_collection(
+            name="knowledge_base",
+            metadata={"hnsw:space": "cosine"}
+        )
 
         self.load_status()
-        self.load_index()   # Only loads FAISS from disk — fast
 
     @property
     def model(self):
         """Thread-safe lazy-load of the embedding model on first use."""
-        if self._model is None:                        # fast path (no lock)
-            with self._model_lock:                     # only one thread loads
-                if self._model is None:                # double-checked locking
-                    print(f"[EMBED] ⏳ Initializing embedding model… (one-time setup)")
+        if self._model is None:
+            with self._model_lock:
+                if self._model is None:
+                    print(f"[EMBED] [*] Initializing embedding model... (one-time setup)")
+                    # Lazy import: keeps startup fast by deferring the heavy PyTorch import
+                    from sentence_transformers import SentenceTransformer
                     self._model = SentenceTransformer(self._model_name)
-                    print(f"[EMBED] ✅ Embedding model ready ({self._model_name})")
+                    print(f"[EMBED] [OK] Embedding model ready ({self._model_name})")
         return self._model
+
     
     def load_status(self):
         if not self.status_path.exists():
@@ -107,46 +110,23 @@ class KnowledgeIndex:
             json.dump(self.status, f, indent=2)
     
     def load_index(self):
-        if self.index_path.exists():
-            try:
-                self.index = faiss.read_index(str(self.index_path))
-                with open(self.meta_path, "rb") as f:
-                    self.items = pickle.load(f)
-                return True
-            except Exception as e:
-                print(f"[ERROR] Failed to load index (corrupted?): {e}")
-                print("[INFO] Starting with empty index...")
-                self.index = None
-                self.items = []
-                return False
-        else:
-            self.index = None
-            self.items = []
-            return False
+        """Kept for backward compatibility. ChromaDB loads automatically."""
+        return True
 
     def save_index(self):
-        try:
-            faiss.write_index(self.index, str(self.index_path))
-            with open(self.meta_path, "wb") as f:
-                pickle.dump(self.items, f)
-            print(f"[OK] Index saved: {len(self.items)} items")
-        except Exception as e:
-            print(f"[ERROR] Failed to save index: {e}")
-            raise  # Re-raise to let caller know saving failed
+        """Kept for backward compatibility. ChromaDB persists automatically."""
+        pass
     
-    def _encode_texts(self, texts: List[str]) -> np.ndarray:
+    def _encode_texts(self, texts: List[str]) -> List[List[float]]:
         """Encode texts into embeddings."""
-        # Initialize index if not exists when adding content
-        if self.index is None:
-            self.index = faiss.IndexFlatL2(self.dimension)
-            
         embeddings = self.model.encode(
             texts,
             batch_size=self.batch_size,
             show_progress_bar=True,
             convert_to_numpy=True
         )
-        return embeddings.astype('float32')
+        # ChromaDB expects Python lists
+        return embeddings.tolist()
     
     # ========================================================
     # TOPIC KEYWORDS for metadata tagging
@@ -171,11 +151,13 @@ class KnowledgeIndex:
         return fallback
     
     def _classify_dept(self, content: str, source_name: str = "", section_title: str = "") -> str:
-        """Classify a chunk as 'CSE' or 'OTHER' based on keyword matching.
-        
-        Checks content, source filename, and section title against CSE_DEPT_KEYWORDS.
-        """
+        """Classify a chunk as 'CSE', 'CSE-DS', 'CSE-CYS', 'CSE-AIML', 'CSE-IOT', or 'OTHER'."""
         combined = f"{content} {source_name} {section_title}".lower()
+        # Check sub-department keywords FIRST (more specific matches)
+        for sub_dept_tag, keywords in CSE_SUB_DEPT_KEYWORDS.items():
+            if any(kw in combined for kw in keywords):
+                return sub_dept_tag
+        # Then check generic CSE
         if any(kw in combined for kw in CSE_DEPT_KEYWORDS):
             return 'CSE'
         return 'OTHER'
@@ -183,34 +165,23 @@ class KnowledgeIndex:
     def _topic_based_chunk(self, text: str, source_name: str) -> List[Dict]:
         """
         Split markdown by ## headings to create topic-focused chunks.
-        
-        Pipeline: .md file → split by headings → each section = 1 chunk
-        
-        Falls back to paragraph chunking if no headings found.
         """
         import re
-        
-        # Split by markdown headings (# ## ###)
-        # Keep the heading with its content
         sections = re.split(r'\n(?=#{1,3}\s+)', text)
-        
-        chunks = []
+        chunks: List[Dict] = []
         for section in sections:
             section = section.strip()
             if not section or len(section) < 30:
                 continue
             
-            # Extract heading as topic title
             heading_match = re.match(r'^(#{1,3})\s+(.+?)$', section, re.MULTILINE)
             if heading_match:
                 topic_title = heading_match.group(2).strip()
             else:
                 topic_title = source_name
             
-            # Detect semantic topic
             detected_topic = self._detect_topic(section, topic_title)
             
-            # If section is too long (>1500 chars), sub-chunk by paragraphs
             if len(section) > 1500:
                 sub_chunks = self._recursive_chunk_text(section, section_title=topic_title)
                 for sub in sub_chunks:
@@ -223,29 +194,17 @@ class KnowledgeIndex:
                     'topic': detected_topic
                 })
         
-        # Fallback: if no heading-based sections, use paragraph chunking
         if not chunks:
             print(f"[CHUNK] No headings found in {source_name}, using paragraph chunking")
             return self._recursive_chunk_text(text, section_title=source_name)
         
-        print(f"[CHUNK] Split {source_name} into {len(chunks)} topic chunks")
         return chunks
     
     def _recursive_chunk_text(self, text: str, section_title: str = "") -> List[Dict]:
-        """
-        Recursively split text into optimal chunks.
-        
-        Strategy:
-        1. Split by paragraphs first (\n\n)
-        2. If paragraph too long, split by sentences
-        3. Apply overlap for context preservation
-        4. Preserve section titles in metadata
-        """
+        """Recursively split text into optimal chunks."""
         import re
-        
-        chunks = []
+        chunks: List[Dict] = []
         paragraphs = text.split('\n\n')
-        
         current_chunk = ""
         current_section = section_title
         
@@ -254,24 +213,19 @@ class KnowledgeIndex:
             if not para:
                 continue
             
-            # Check if this is a section header (starts with common patterns)
             header_match = re.match(r'^#+\s*(.+)$|^([A-Z][^.!?]*):$|^\*\*(.+)\*\*$', para)
             if header_match:
-                # Update section title
                 current_section = header_match.group(1) or header_match.group(2) or header_match.group(3) or section_title
             
-            # Check if adding this paragraph exceeds chunk size
             if len(current_chunk) + len(para) <= self.chunk_size:
                 current_chunk += para + "\n\n"
             else:
-                # Save current chunk if not empty
                 if current_chunk.strip():
                     chunks.append({
                         'content': current_chunk.strip(),
                         'section': current_section
                     })
                 
-                # If paragraph itself is too long, split by sentences
                 if len(para) > self.chunk_size:
                     sentences = re.split(r'(?<=[.!?])\s+', para)
                     sent_chunk = ""
@@ -292,19 +246,15 @@ class KnowledgeIndex:
                 else:
                     current_chunk = para + "\n\n"
         
-        # Don't forget the last chunk
         if current_chunk.strip():
             chunks.append({
                 'content': current_chunk.strip(),
                 'section': current_section
             })
         
-        # Apply overlap between chunks
-        overlapped_chunks = []
+        overlapped_chunks: List[Dict] = []
         for i, chunk in enumerate(chunks):
             content = chunk['content']
-            
-            # Add overlap from previous chunk
             if i > 0 and self.chunk_overlap > 0:
                 prev_content = chunks[i-1]['content']
                 overlap_text = prev_content[-self.chunk_overlap:] if len(prev_content) > self.chunk_overlap else prev_content
@@ -316,67 +266,85 @@ class KnowledgeIndex:
             })
         
         return overlapped_chunks
+
+    def _sanitize_metadata(self, metadata: dict) -> dict:
+        """ChromaDB metadata must only have string, int, float, or bool values."""
+        clean: Dict = {}
+        for k, v in metadata.items():
+            if v is None:
+                continue
+            if type(v) in [str, int, float, bool]:
+                clean[k] = v
+            else:
+                clean[k] = str(v)
+        return clean
+
+    def _add_to_chroma(self, items: List[KnowledgeItem]):
+        """Helper to batch add items to ChromaDB."""
+        if not items:
+            return
+        
+        texts = [i.content for i in items]
+        ids = [i.id for i in items]
+        metadatas: List[Dict] = []
+        for i in items:
+            meta = {
+                "source_type": i.source_type,
+                "source_url": i.source_url,
+                "source_name": i.source_name,
+                "doc_type": i.doc_type,
+            }
+            if i.page_number is not None:
+                meta["page_number"] = i.page_number
+            meta.update(i.metadata)
+            metadatas.append(self._sanitize_metadata(meta))
+            
+        embeddings = self._encode_texts(texts)
+        
+        self.collection.upsert(
+            ids=ids,
+            embeddings=embeddings,
+            documents=texts,
+            metadatas=metadatas
+        )
     
     def add_webpage_content(self, pages: List[Dict], skip_cleaning: bool = False) -> int:
-        """Add scraped webpage content to the index with improved chunking.
-        
-        Args:
-            pages: List of page dicts with 'markdown' or 'clean_text', 'title', 'url'
-            skip_cleaning: If True, skip noise detection and text cleaning (use for pre-cleaned content)
-        """
-        items_added = 0
-        texts_to_encode = []
+        """Add scraped webpage content to the index."""
+        items_added: int = 0
         items_to_add = []
         
-        print(f"[*] Indexing {len(pages)} webpages with BGE embeddings...")
+        print(f"[*] Indexing {len(pages)} webpages with ChromaDB...")
         
-        # ========================================================
-        # STEP 1: Build noise lines using REPETITION-BASED detection
-        # Lines appearing in many pages are boilerplate (nav, footer, etc)
-        # SKIP if content is already cleaned
-        # ========================================================
-        noise_lines = set()
+        noise_lines: set = set()
         if not skip_cleaning:
             print(f"[*] Analyzing {len(pages)} pages for repeated boilerplate lines...")
             noise_lines = build_noise_lines(pages)
-            print(f"[*] Found {len(noise_lines)} noise lines (appearing in many pages)")
-        else:
-            print(f"[*] Skipping noise detection (pre-cleaned content)")
         
         for page in pages:
-            # Support both old format (clean_text) and new format (markdown)
             raw_content = page.get('clean_text', '') or page.get('markdown', '')
-            
-            # ========================================================
-            # STEP 2: Clean using repetition-based noise detection FIRST
-            # Then apply pattern-based fallback
-            # SKIP if content is already cleaned
-            # ========================================================
             if skip_cleaning:
-                content = raw_content  # Use as-is
+                content = raw_content
             else:
-                content = clean_markdown(raw_content, noise_lines)  # Repetition-based
-                content = clean_webpage_text(content, noise_lines)  # Pattern fallback
+                content = clean_markdown(raw_content, noise_lines)
+                content = clean_webpage_text(content, noise_lines)
             
             if len(content) < 50:
                 continue
             
             title = page.get('title', 'Untitled')
-            
-            # Use TOPIC-BASED chunking (split by ## headings)
             chunks = self._topic_based_chunk(content, source_name=title)
             
             for idx, chunk_data in enumerate(chunks):
                 chunk_content = chunk_data['content']
-                section = chunk_data.get('section', title)
-                topic = chunk_data.get('topic', 'general')
-                
-                # Skip very short chunks
                 if len(chunk_content) < 30:
                     continue
                 
+                # We do some quick role checking here
+                content_lower = chunk_content.lower()
+                is_leadership = any(role in content_lower for role in ['chairman', 'director', 'principal', 'dean'])
+                
                 item = KnowledgeItem(
-                    id=len(self.items) + len(items_to_add),
+                    id=f"web_{uuid.uuid4().hex[:16]}",
                     content=chunk_content,
                     source_type='webpage',
                     source_url=page.get('url', ''),
@@ -384,33 +352,33 @@ class KnowledgeIndex:
                     doc_type='webpage',
                     page_number=None,
                     metadata={
-                    'chunk_index': idx,
-                    'total_chunks': len(chunks),
-                    'section': section,
-                    'topic': topic,  # NEW: topic metadata for filtering
-                    'scraped_at': page.get('scraped_at', ''),
-                    'dept': self._classify_dept(chunk_content, title, section),
-                }    )
+                        'chunk_index': idx,
+                        'total_chunks': len(chunks),
+                        'section': chunk_data.get('section', title),
+                        'topic': chunk_data.get('topic', 'general'),
+                        'scraped_at': page.get('scraped_at', ''),
+                        'dept': self._classify_dept(chunk_content, title, chunk_data.get('section', title)),
+                        'is_leadership': is_leadership
+                    }
+                )
                 items_to_add.append(item)
-                texts_to_encode.append(chunk_content)
-                items_added += 1
+                items_added = items_added + 1  # pyre-ignore[58]
+                if len(items_to_add) >= 100:
+                    self._add_to_chroma(items_to_add)
+                    items_to_add.clear()
         
-        if texts_to_encode:
-            print(f"[*] Encoding {len(texts_to_encode)} chunks with {self._model_name}...")
-            embeddings = self._encode_texts(texts_to_encode)
-            self.index.add(embeddings)
-            self.items.extend(items_to_add)
-        
+        if items_to_add:
+            self._add_to_chroma(items_to_add)
+            
         print(f"[OK] Added {items_added} webpage chunks to index")
         return items_added
     
     def add_pdf_chunks(self, chunks: List[Dict]) -> int:
-        """Add PDF chunks to the index with TOPIC-BASED chunking."""
-        items_added = 0
-        texts_to_encode = []
-        items_to_add = []
+        """Add PDF chunks to the index."""
+        items_added: int = 0
+        items_to_add: List[KnowledgeItem] = []
         
-        print(f"[*] Indexing {len(chunks)} PDF pages with topic-based chunking...")
+        print(f"[*] Indexing {len(chunks)} PDF pages with ChromaDB...")
         
         for chunk in chunks:
             content = chunk.get('content', '')
@@ -419,82 +387,83 @@ class KnowledgeIndex:
             
             pdf_name = chunk.get('pdf_name', 'Unknown PDF')
             page_number = chunk.get('page_number')
-            
-            # Apply topic-based chunking to PDF content
             topic_chunks = self._topic_based_chunk(content, source_name=pdf_name)
             
             for idx, tc in enumerate(topic_chunks):
                 tc_content = tc['content']
-                section = tc.get('section', pdf_name)
-                topic = tc.get('topic', 'general')
-                
                 if len(tc_content) < 20:
                     continue
                 
                 item = KnowledgeItem(
-                    id=len(self.items) + len(items_to_add),
+                    id=f"pdf_{uuid.uuid4().hex[:16]}",
                     content=tc_content,
                     source_type='pdf',
                     source_url=chunk.get('pdf_path', ''),
                     source_name=pdf_name,
-                    doc_type=chunk.get('doc_type', 'general'),
+                    doc_type=chunk.get('doc_type', 'pdf'),
                     page_number=page_number,
                     metadata={
-                    'section': section,
-                    'topic': topic,  # NEW: topic metadata
-                    'chunk_index': idx,
-                    'dept': self._classify_dept(tc_content, pdf_name, section),
-                    **chunk.get('metadata', {})
-                }    )
+                        'section': tc.get('section', pdf_name),
+                        'topic': tc.get('topic', 'general'),
+                        'chunk_index': idx,
+                        'dept': self._classify_dept(tc_content, pdf_name, tc.get('section', pdf_name)),
+                    }
+                )
+                # Overwrite metadata from caller
+                for k, v in chunk.get('metadata', {}).items():
+                    item.metadata[k] = v
                 items_to_add.append(item)
-                texts_to_encode.append(tc_content)
-                items_added += 1
-        
-        if texts_to_encode:
-            embeddings = self._encode_texts(texts_to_encode)
-            self.index.add(embeddings)
-            self.items.extend(items_to_add)
-        
+                items_added = items_added + 1  # pyre-ignore[58]
+                
+                if len(items_to_add) >= 100:
+                    self._add_to_chroma(items_to_add)
+                    items_to_add.clear()
+                    
+        if items_to_add:
+            self._add_to_chroma(items_to_add)
+            
         print(f"[OK] Added {items_added} PDF topic chunks to index")
         return items_added
     
     def add_markdown_file(self, filepath: Path, source_name: str = "Faculty Directory") -> int:
         """Add structured markdown content (like faculty.md) to the index."""
-        from pathlib import Path
-        
         filepath = Path(filepath)
         if not filepath.exists():
             print(f"[INFO] {filepath} not found, skipping...")
             return 0
         
-        items_added = 0
-        texts_to_encode = []
-        items_to_add = []
-        
         print(f"[*] Indexing markdown file: {filepath.name}...")
-        
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
-            
             if len(content) < 50:
-                print(f"[SKIP] File too small")
                 return 0
             
-            # Use TOPIC-BASED chunking for markdown files
             chunks = self._topic_based_chunk(content, source_name=source_name)
+            items_to_add: List[KnowledgeItem] = []
             
             for idx, chunk_data in enumerate(chunks):
                 chunk_content = chunk_data['content']
-                section = chunk_data.get('section', source_name)
-                topic = chunk_data.get('topic', 'faculty')
-                
-                # Skip very short chunks
                 if len(chunk_content) < 30:
                     continue
                 
+                content_lower = chunk_content.lower()
+                role = "faculty"
+                if "hod" in content_lower or "head" in content_lower:
+                    role = "hod"
+                elif "principal" in content_lower:
+                    role = "principal"
+                elif "chairman" in content_lower or "chairperson" in content_lower:
+                    role = "chairman"
+                elif "director" in content_lower:
+                    role = "director"
+                elif "dean" in content_lower:
+                    role = "dean"
+                    
+                is_leadership = role != "faculty"
+                
                 item = KnowledgeItem(
-                    id=len(self.items) + len(items_to_add),
+                    id=f"md_{uuid.uuid4().hex[:16]}",
                     content=chunk_content,
                     source_type='markdown',
                     source_url=str(filepath),
@@ -502,204 +471,120 @@ class KnowledgeIndex:
                     doc_type='faculty_directory',
                     page_number=None,
                     metadata={
-                    'chunk_index': idx,
-                    'total_chunks': len(chunks),
-                    'section': section,
-                    'topic': topic,  # NEW: topic metadata
-                    'file_type': 'markdown',
-                    'indexed_at': datetime.now().isoformat(),
-                    'dept': self._classify_dept(chunk_content, source_name, section),
-                }    )
+                        'chunk_index': idx,
+                        'total_chunks': len(chunks),
+                        'section': chunk_data.get('section', source_name),
+                        'topic': chunk_data.get('topic', 'faculty'),
+                        'file_type': 'markdown',
+                        'indexed_at': datetime.now().isoformat(),
+                        'dept': self._classify_dept(chunk_content, source_name, chunk_data.get('section', source_name)),
+                        'role': role,
+                        'is_leadership': is_leadership
+                    }
+                )
                 items_to_add.append(item)
-                texts_to_encode.append(chunk_content)
-                items_added += 1
             
-            if texts_to_encode:
-                print(f"[*] Encoding {len(texts_to_encode)} faculty chunks...")
-                embeddings = self._encode_texts(texts_to_encode)
-                self.index.add(embeddings)
-                self.items.extend(items_to_add)
-            
-            print(f"[OK] Added {items_added} faculty chunks from {filepath.name}")
-            return items_added
-            
+            if items_to_add:
+                self._add_to_chroma(items_to_add)
+            print(f"[OK] Added {len(items_to_add)} markdown chunks to index")
+            return len(items_to_add)
         except Exception as e:
             print(f"[ERROR] Failed to index {filepath}: {e}")
-            import traceback
-            traceback.print_exc()
             return 0
-    
-    def search(self, query: str, top_k: int = 5, min_similarity: float = 0.3) -> List[Tuple[KnowledgeItem, float]]:
-        """Search for relevant content using semantic similarity with source-aware filtering."""
-        print(f"[INDEX SEARCH] Query: '{query[:50]}...', top_k={top_k}, min_similarity={min_similarity}")
-        
-        if self.index is None or self.index.ntotal == 0:
-            print(f"[INDEX SEARCH ERROR] Index is None or empty! ntotal={self.index.ntotal if self.index else 'None'}")
-            return []
-        
-        print(f"[INDEX SEARCH] Index has {self.index.ntotal} items, encoding query...")
+
+    def search(self, query: str, top_k: int = 5, min_similarity: float = 0.3, where: Optional[Dict] = None) -> List[Tuple[KnowledgeItem, float]]:
+        """Search ChromaDB using metadata filters."""
+        print(f"[INDEX SEARCH] Query: '{query[:50]}...', top_k={top_k}, where={where}")
         
         try:
-            query_embedding = self.model.encode([query], convert_to_numpy=True).astype('float32')
-            print(f"[INDEX SEARCH] Query encoded, searching FAISS...")
-            distances, indices = self.index.search(query_embedding, min(top_k * 3, self.index.ntotal))
-            print(f"[INDEX SEARCH] FAISS search complete. Processing {len(indices[0])} results...")
+            query_embedding = self._encode_texts([query])[0]
+            
+            # Use chromadb's query
+            # We request more results initially if min_similarity clipping is strict
+            results = self.collection.query(
+                query_embeddings=[query_embedding],
+                n_results=top_k * 2, 
+                where=where
+            )
+            
+            if not results["ids"] or not results["ids"][0]:
+                print("[INDEX SEARCH] No results found in ChromaDB.")
+                return []
+                
+            final_results: List[Tuple[KnowledgeItem, float]] = []
+            
+            # ChromaDB cosine returns distance. Similarity = 1 - distance
+            for i in range(len(results["ids"][0])):
+                doc_id = results["ids"][0][i]
+                content = results["documents"][0][i]
+                metadata = results["metadatas"][0][i]
+                distance = results["distances"][0][i]
+                
+                similarity = max(0.0, 1.0 - distance)
+                
+                if similarity >= min_similarity:
+                    item = KnowledgeItem(
+                        id=doc_id,
+                        content=content,
+                        source_type=metadata.get("source_type", "unknown"),
+                        source_url=metadata.get("source_url", ""),
+                        source_name=metadata.get("source_name", ""),
+                        doc_type=metadata.get("doc_type", "unknown"),
+                        page_number=int(metadata.get("page_number")) if "page_number" in metadata else None,
+                        metadata=metadata
+                    )
+                    final_results.append((item, float(similarity)))
+                    
+            # Sort by similarity
+            final_results.sort(key=lambda x: x[1], reverse=True)
+            
+            # Dynamic cutoff logic: drop noisy low-confidence tails if top results are great
+            if len(final_results) > 0:
+                first_item = final_results[0]  # pyre-ignore[16]
+                if first_item[1] > 0.7:
+                    final_results = [r for r in final_results if r[1] > 0.5]
+                
+            return final_results[:top_k]  # pyre-ignore
+            
         except Exception as e:
-            print(f"[INDEX SEARCH ERROR] Encoding or FAISS search failed: {e}")
+            print(f"[INDEX SEARCH ERROR]: {e}")
             import traceback
             traceback.print_exc()
-            raise
-        
-        # ========================================================
-        # SOURCE-AWARE RETRIEVAL: Smart Filtering
-        # ========================================================
-        query_lower = query.lower()
-        
-        # DEFINITIONS
-        # 1. Queries that should prefer WEBPAGEs (mostly static info)
-        webpage_priority_keywords = [
-            "fee", "tuition", "admission", "admissions", "hostel", 
-            "contact", "address", "phone", "email", "principal", "about",
-            "eligibility", "cut off", "cutoff", "ranking", "rank"
-        ]
-        
-        # 2. Queries that might need PDFs (Placements, Syllabus, Calendars)
-        pdf_priority_keywords = [
-            "syllabus", "curriculum", "calendar", "handbook", "brochure",
-            "placements", "placement report", "regulation",
-            "fee", "fees"
-        ]
+            return []
 
-        # 3. Junk PDFs that confuse the LLM (Financial audits, NAAC reports)
-        bad_pdf_patterns = ["naac", "audit", "budget", "finance", "expenditure", "balance sheet"]
-        
-        # 4. High-value PDFs
-        good_pdf_patterns = ["placement", "brochure", "syllabus", "calendar", "academic", "handbook", "fees"]
-        
-        prefer_webpage = any(kw in query_lower for kw in webpage_priority_keywords)
-        prefer_faculty = "faculty" in query_lower or "professor" in query_lower
-        
-        results = []
-        for dist, idx in zip(distances[0], indices[0]):
-            if idx < 0 or idx >= len(self.items):
-                continue
-            
-            item = self.items[idx]
-            similarity = 1 / (1 + dist)
-            adjusted_similarity = similarity
-            
-            # ========================================================
-            # SCORING ADJUSTMENTS
-            # ========================================================
-            
-            # 1. Handle PDFs
-            if item.source_type == 'pdf':
-                pdf_name = item.source_name.lower()
-                
-                # Penalize "Junk" PDFs (NAAC, Audit, etc) - ALWAYS
-                if any(bad in pdf_name for bad in bad_pdf_patterns):
-                    adjusted_similarity *= 0.4  # Heavy penalty
-                    # print(f"[FILTER] Junk PDF '{item.source_name}' penalized heavily")
-                
-                # Boost "Good" PDFs (Placements, Syllabus)
-                elif any(good in pdf_name for good in good_pdf_patterns):
-                    adjusted_similarity *= 1.15
-                    # print(f"[FILTER] Good PDF '{item.source_name}' boosted")
-                    
-                # If query strictly wants webpage (e.g. "fees"), penalize generic PDFs
-                elif prefer_webpage:
-                    adjusted_similarity *= 0.6
-                
-                # Otherwise (neutral PDF), slight penalty to prefer content
-                else:
-                    adjusted_similarity *= 0.9
-
-            # 2. Handle Webpages
-            elif item.source_type == 'webpage':
-                # Boost if query matches webpage priority topics
-                if prefer_webpage:
-                    adjusted_similarity *= 1.2
-                
-                # Penalize very short content (nav menus)
-                if len(item.content) < 100:
-                    adjusted_similarity *= 0.6
-            
-            # 3. Handle Faculty Data
-            elif item.doc_type == 'markdown' or 'faculty' in item.source_name.lower():
-                if prefer_faculty:
-                    adjusted_similarity *= 1.4  # Strong boost for faculty queries
-            
-            # Threshold Check
-            if adjusted_similarity >= min_similarity:
-                results.append((item, float(adjusted_similarity)))
-        
-        # Sort results
-        results.sort(key=lambda x: x[1], reverse=True)
-        
-        # ========================================================
-        # DYNAMIC CUTOFF
-        # ========================================================
-        # If we have very high confidence results (>0.7), drop the low confidence ones (<0.5)
-        # This reduces noise validation
-        if results and results[0][1] > 0.7:
-            results = [r for r in results if r[1] > 0.5]
-            
-        final_results = results[:top_k]
-        
-        # Log source breakdown
-        sources = {}
-        for item, score in final_results:
-            st = item.source_type
-            sources[st] = sources.get(st, 0) + 1
-        
-        print(f"[SEARCH] Returning {len(final_results)} results. Sources: {sources}")
-        return final_results
-    
     def search_by_type(self, query: str, doc_type: str, top_k: int = 5) -> List[Tuple[KnowledgeItem, float]]:
         """Search within a specific document type."""
-        all_results = self.search(query, top_k * 3)
-        filtered = [
-            (item, score) for item, score in all_results 
-            if item.doc_type == doc_type
-        ]
-        return filtered[:top_k]
-    
+        return self.search(query, top_k=top_k, where={"doc_type": doc_type})
+
     def get_stats(self) -> Dict:
         """Get index statistics."""
-        doc_types = {}
-        source_types = {'webpage': 0, 'pdf': 0}
-        
-        for item in self.items:
-            doc_type = item.doc_type
-            if doc_type not in doc_types:
-                doc_types[doc_type] = 0
-            doc_types[doc_type] += 1
-            source_types[item.source_type] += 1
-        
+        try:
+            count = self.collection.count()
+        except Exception:
+            count = 0
+            
         return {
-            'total_items': len(self.items),
-            'index_size': self.index.ntotal if self.index else 0,
-            'by_doc_type': doc_types,
-            'by_source_type': source_types,
+            'total_items': count,
+            'index_size': count,
             'status': self.status
         }
     
     def clear(self):
         """Clear the entire index."""
-        self.index = faiss.IndexFlatL2(self.dimension)
-        self.items = []
-        self.save_status(False, "", 0, 0, 0)
-        # Remove files
-        if self.index_path.exists():
-            self.index_path.unlink()
-        if self.meta_path.exists():
-            self.meta_path.unlink()
-        print("[OK] Index cleared")
+        try:
+            self.client.delete_collection("knowledge_base")
+            self.collection = self.client.create_collection(
+                name="knowledge_base",
+                metadata={"hnsw:space": "cosine"}
+            )
+            self.save_status(False, "", 0, 0, 0)
+            print("[OK] Index cleared")
+        except Exception as e:
+            print(f"Error clearing: {e}")
 
 
 # Singleton instance
 _knowledge_index: Optional[KnowledgeIndex] = None
-
 
 def get_knowledge_index() -> KnowledgeIndex:
     """Get or create the knowledge index singleton."""
@@ -710,7 +595,5 @@ def get_knowledge_index() -> KnowledgeIndex:
 
 
 if __name__ == "__main__":
-    # Test
     index = KnowledgeIndex()
-    print(f"Status: {index.status}")
     print(f"Stats: {index.get_stats()}")

@@ -130,8 +130,7 @@ class FirecrawlCrawler:
         import re
         pdf_pattern = r'\[([^\]]*)\]\(([^)]+\.pdf[^)]*)\)'
         matches = re.findall(pdf_pattern, markdown, re.IGNORECASE)
-        
-        pdf_links = []
+        pdf_links: List[str] = []
         for _, url in matches:
             # Build full URL
             if url.startswith('http'):
@@ -146,7 +145,7 @@ class FirecrawlCrawler:
             if self._is_important_pdf(full_url):
                 pdf_links.append(full_url)
             else:
-                self.skipped_pdfs += 1
+                self.skipped_pdfs = self.skipped_pdfs + 1  # pyre-ignore[58]
         
         return list(set(pdf_links))
     
@@ -155,8 +154,7 @@ class FirecrawlCrawler:
         import re
         link_pattern = r'\[([^\]]*)\]\(([^)]+)\)'
         matches = re.findall(link_pattern, markdown)
-        
-        links = []
+        links: List[str] = []
         for _, url in matches:
             # Skip PDFs and external links
             if '.pdf' in url.lower():
@@ -264,9 +262,7 @@ class FirecrawlCrawler:
                 pages_data = crawl_result.get('data', []) if isinstance(crawl_result, dict) else getattr(crawl_result, 'data', [])
             else:
                 print(f"[FIRECRAWL] Crawl ended with status: {status}")
-                pages_data = []
-            
-            # Process results
+                pages_data: List = []
             return self._process_crawl_results(pages_data, url, progress_callback)
             
         except AttributeError as e:
@@ -454,8 +450,8 @@ class FirecrawlCrawler:
         import time
         
         total = len(self.pdf_urls)
-        downloaded = 0
-        failed = 0
+        downloaded: int = 0
+        failed: int = 0
         
         print(f"[FIRECRAWL] Downloading {total} PDFs...")
         
@@ -469,7 +465,7 @@ class FirecrawlCrawler:
             
             if filepath.exists():
                 print(f"[SKIP] {filename} already exists")
-                downloaded += 1  # Count existing files
+                downloaded = downloaded + 1  # pyre-ignore[58]  # Count existing files
             else:
                 # Retry logic: 3 attempts with exponential backoff
                 max_retries = 3
@@ -495,7 +491,7 @@ class FirecrawlCrawler:
                                     if chunk:
                                         f.write(chunk)
                             
-                            downloaded += 1
+                            downloaded = downloaded + 1  # pyre-ignore[58]
                             success = True
                             print(f"[OK] Downloaded {filename}")
                             break
@@ -512,7 +508,7 @@ class FirecrawlCrawler:
                             time.sleep(wait_time)
                         else:
                             print(f"[FAILED] {filename} - Max retries exceeded (connection timeout)")
-                            failed += 1
+                            failed = failed + 1  # pyre-ignore[58]
                     
                     except requests.exceptions.ConnectionError as e:
                         print(f"[CONNECTION ERROR] Attempt {attempt}: {str(e)[:100]}")
@@ -522,7 +518,7 @@ class FirecrawlCrawler:
                             time.sleep(wait_time)
                         else:
                             print(f"[FAILED] {filename} - Max retries exceeded (connection error)")
-                            failed += 1
+                            failed = failed + 1  # pyre-ignore[58]
                     
                     except Exception as e:
                         print(f"[ERROR] Attempt {attempt} failed: {str(e)[:100]}")
@@ -530,7 +526,7 @@ class FirecrawlCrawler:
                             time.sleep(2 ** attempt)
                         else:
                             print(f"[FAILED] {filename} - {type(e).__name__}: {str(e)[:100]}")
-                            failed += 1
+                            failed = failed + 1  
                         break
             
             # Progress callback

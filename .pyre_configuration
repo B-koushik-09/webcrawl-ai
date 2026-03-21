@@ -1,0 +1,9 @@
+{
+  "source_directories": [
+    "Backend"
+  ],
+  "exclude": [
+    "venv",
+    ".pytest_cache"
+  ]
+}

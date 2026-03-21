@@ -2,7 +2,15 @@
 CollegeWeb AI - Configuration Settings
 """
 import os
+import sys
 from pathlib import Path
+
+# Force UTF-8 for Windows console to prevent UnicodeEncodeError (e.g. for ₹ symbol)
+if sys.stdout and sys.stdout.encoding != 'utf-8':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
 
 # Base directories
 BASE_DIR = Path(__file__).parent
@@ -41,6 +49,14 @@ EMBEDDING_CONFIG = {
 }
 
 # CSE Department Detection — used at INDEXING TIME to tag chunks with dept='CSE' or 'OTHER'
+# Sub-department keywords are checked FIRST to prevent CSE-DS/CYS from being tagged as plain 'CSE'
+CSE_SUB_DEPT_KEYWORDS = {
+    'CSE-DS': ['cse-ds', 'cse ds', 'data science', 'ds department'],
+    'CSE-CYS': ['cys', 'cyber security', 'cybersecurity', 'cse-cys'],
+    'CSE-AIML': ['aiml', 'ai & ml', 'ai and ml', 'cse-aiml', 'artificial intelligence and machine learning'],
+    'CSE-IOT': ['iot', 'internet of things', 'cse-iot'],
+}
+
 CSE_DEPT_KEYWORDS = [
     'cse', 'computer science', 'c.s.e', 'department of computer science',
     'b.tech cse', 'cse syllabus', 'cse lab', 'cse faculty',
@@ -72,16 +88,21 @@ RAG_CONFIG = {
     "max_context_length": 15000, # Increased context limit for Gemini/Large Tables
 }
 
-# LLM configuration — 3-tier fallback chain
-# Priority: Gemini Flash  →  HF Mistral 7B  →  Ollama local
+# LLM configuration — 4-tier fallback chain (with sub-model fallbacks)
+# Priority: Gemini → OpenRouter (mistral-7b → solar-pro-3) → HF (Llama-3-8B → Mistral-v0.3) → Ollama
 LLM_CONFIG = {
-    # Tier 1 — Google Gemini (fastest, best quality, free tier)
-    "gemini_model": "gemini-2.5-flash",
+    # Tier 1 — Google Gemini (fastest, best quality)
+    "gemini_model": "gemini-2.0-flash",
 
-    # Tier 2 — Hugging Face Mistral 7B (free tier, good for RAG)
-    "hf_model": "mistralai/Mistral-7B-Instruct-v0.2",
+    # Tier 2 — OpenRouter (primary + fallback)
+    "openrouter_model": "mistralai/mistral-7b-instruct",
+    "openrouter_fallback": "upstage/solar-pro-3:free",
 
-    # Tier 3 — Ollama local (offline safety net, no API key)
+    # Tier 3 — HuggingFace (primary + fallback)
+    "hf_model": "meta-llama/Meta-Llama-3-8B-Instruct",
+    "hf_fallback": "mistralai/Mistral-7B-Instruct-v0.3",
+
+    # Tier 4 — Ollama local (offline safety net, no API key)
     "ollama_model": "qwen2.5:1.5b",
 
     "temperature": 0.1,   # Low = factual, minimal hallucination

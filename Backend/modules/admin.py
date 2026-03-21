@@ -118,32 +118,27 @@ class AdminManager:
             'target_url': None
         }
         
-        # Check scraped pages
-        pages_file = DATA_DIR / 'scraped_pages.json'
-        if pages_file.exists():
+        # Primary source: index_status.json (written by ChromaDB rebuild)
+        status_file = VECTOR_STORE_DIR.parent / 'index_status.json'
+        if status_file.exists():
             try:
-                with open(pages_file, 'r', encoding='utf-8') as f:
+                with open(status_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    stats['pages_scraped'] = data.get('pages_count', 0)
-                    stats['target_url'] = data.get('base_url')
-                    stats['last_updated'] = data.get('scraped_at')
+                    if data.get('indexed', False):
+                        stats['has_index'] = True
+                        stats['pages_scraped'] = data.get('pages', 0)
+                        stats['pdfs_processed'] = data.get('pdfs', 0)
+                        stats['total_chunks'] = data.get('chunks', 0)
+                        stats['target_url'] = data.get('url')
+                        stats['last_updated'] = data.get('last_updated')
+                        return stats
             except:
                 pass
         
-        # Check processed PDFs
-        pdfs_file = DATA_DIR / 'processed_pdfs.json'
-        if pdfs_file.exists():
-            try:
-                with open(pdfs_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    stats['pdfs_processed'] = data.get('total_pdfs', 0)
-                    stats['total_chunks'] = data.get('total_chunks', 0)
-            except:
-                pass
-        
-        # Check if FAISS index exists
-        index_file = VECTOR_STORE_DIR / 'faiss_index.bin'
-        stats['has_index'] = index_file.exists()
+        # Fallback: check if ChromaDB directory exists
+        chromadb_dir = VECTOR_STORE_DIR.parent / 'chromadb'
+        if chromadb_dir.exists():
+            stats['has_index'] = True
         
         return stats
     
