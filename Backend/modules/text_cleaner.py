@@ -1,11 +1,7 @@
 """
-CollegeWeb AI - Text Cleaner Module
+VNRVJIET AI - Text Cleaner Module
 Removes navigation menus, headers, footers, and useless template text
 from scraped webpage content before embedding.
-
-Uses REPETITION-BASED detection instead of pattern-based:
-- Lines that appear across many pages are automatically identified as boilerplate
-- This catches navigation, headers, footers, menus that regex would miss
 """
 
 import re

@@ -1,5 +1,5 @@
 """
-CollegeWeb AI - Website Scraping Module
+VNRVJIET AI - Website Scraping Module
 Crawls all website pages, extracts content, and discovers PDF links.
 """
 import re

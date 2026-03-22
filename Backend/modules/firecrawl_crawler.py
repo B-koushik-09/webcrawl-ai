@@ -1,5 +1,5 @@
 """
-CollegeWeb AI - Firecrawl-based Website Crawler
+VNRVJIET AI - Firecrawl-based Website Crawler
 Professional recursive web crawling with clean markdown output.
 
 Features:

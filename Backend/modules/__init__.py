@@ -1,1 +1,1 @@
-# CollegeWeb AI Modules
+# VNRVJIET AI Modules

@@ -1,5 +1,5 @@
 """
-CollegeWeb AI - Configuration Settings
+VNRVJIET AI - Configuration Settings
 """
 import os
 import sys
@@ -15,13 +15,16 @@ if sys.stdout and sys.stdout.encoding != 'utf-8':
 # Base directories
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
-VECTOR_STORE_DIR = BASE_DIR / "vector_store"
+STORAGE_DIR = BASE_DIR / "storage"
 PDF_DIR = DATA_DIR / "pdfs"
 
 # Create directories if they don't exist
 DATA_DIR.mkdir(exist_ok=True)
-VECTOR_STORE_DIR.mkdir(exist_ok=True)
+STORAGE_DIR.mkdir(exist_ok=True)
 PDF_DIR.mkdir(exist_ok=True)
+
+# Alias for backward compatibility
+VECTOR_STORE_DIR = STORAGE_DIR
 
 # Scraping configuration
 SCRAPE_CONFIG = {
@@ -29,7 +32,7 @@ SCRAPE_CONFIG = {
     "max_depth": 5,             # Maximum crawl depth
     "timeout": 30,              # Request timeout in seconds
     "delay": 0.5,               # Delay between requests
-    "user_agent": "CollegeWebAI Bot/1.0",
+    "user_agent": "VNRVJIET AI Bot/1.0",
     "allowed_extensions": [".html", ".htm", ".php", ".asp", ".aspx", ""],
     "pdf_extensions": [".pdf"],
 }
@@ -79,11 +82,12 @@ GENERAL_KEYWORDS = [
 # Other Branch Keywords — queries that should definitely NOT have CSE boost
 OTHER_BRANCH_KEYWORDS = [
     'ece', 'mechanical', 'civil', 'eee', 'it', 'electronics', 'electrical',
+    'ae', 'automobile', 'engineering',
 ]
 
 # RAG configuration
 RAG_CONFIG = {
-    "top_k": 3,                  # Tight default — DYNAMIC_K in rag_engine.py overrides per query type
+    "top_k": 3,                   
     "min_similarity": 0.6,      # Strict threshold to filter PDF noise (313 PDFs vs 103 pages)
     "max_context_length": 15000, # Increased context limit for Gemini/Large Tables
 }

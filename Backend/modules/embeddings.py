@@ -1,7 +1,6 @@
 """
-CollegeWeb AI - Knowledge Indexing Module
+VNRVJIET AI - Knowledge Indexing Module
 Converts content into vector embeddings and stores in ChromaDB.
-Persistent storage implementation.
 """
 import os
 import json
@@ -21,11 +20,7 @@ from modules.text_cleaner import clean_webpage_text, build_noise_lines, clean_ma
 # Import CSE department keywords for chunk classification
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
-from config import CSE_DEPT_KEYWORDS, CSE_SUB_DEPT_KEYWORDS
-
-# Storage paths
-STORAGE_DIR = Path(__file__).parent.parent / "storage"
-STORAGE_DIR.mkdir(exist_ok=True)
+from config import CSE_DEPT_KEYWORDS, CSE_SUB_DEPT_KEYWORDS, STORAGE_DIR
 
 
 @dataclass

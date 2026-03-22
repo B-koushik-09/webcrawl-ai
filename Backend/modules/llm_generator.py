@@ -1,5 +1,5 @@
 """
-CollegeWeb AI — LLM Answer Generator
+VNRVJIET AI — LLM Answer Generator
 # 3-Tier Fallback Chain
 #   1. Gemini 2.5 Flash    (Google AI — fastest, best quality, free tier)
 #   2. HF Qwen2.5-72B     (Hugging Face Inference Router → Serverless API, free)
@@ -78,7 +78,8 @@ class LLMGenerator:
         "8. Do NOT confuse table row numbers (S.No) with counts.\n"
         "9. For fee questions: prioritize Domestic fees unless asked about NRI/International.\n"
         "10. For HOD/Head queries: only state someone is an HOD if they have 'Head' or 'HOD' "
-        "in their Designation or Profile. Do not infer HOD status from just being a Professor.\n\n"
+        "in their Designation or Profile. Do not infer HOD status from just being a Professor.\n"
+        "11. If a source file name contains 'faq', remove it from your response citations and do not show it to the user.\n\n"
         "If your answer repeats long phrases from the context, rewrite it more concisely."
     )
 
@@ -320,7 +321,7 @@ class LLMGenerator:
             ],
             extra_headers={
                 "HTTP-Referer": "https://vnrvjiet.ac.in",
-                "X-Title": "CollegeWeb AI",
+                "X-Title": "VNRVJIET AI",
             },
             max_tokens=self.max_tokens,
             temperature=self.temperature,

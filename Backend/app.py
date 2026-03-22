@@ -1,5 +1,5 @@
 """
-CollegeWeb AI - Main FastAPI Application
+VNRVJIET AI - Main FastAPI Application
 Intelligent College Website Knowledge Assistant
 """
 import asyncio
@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler - loads index on startup."""
     global knowledge_index, rag_engine
     
-    print("[*] Starting CollegeWeb AI...")
+    print("[*] Starting VNRVJIET AI...")
     
     # Load persistent knowledge index (automatically loads from disk)
     knowledge_index = KnowledgeIndex()
@@ -94,12 +94,12 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    print("[*] Shutting down CollegeWeb AI...")
+    print("[*] Shutting down VNRVJIET AI...")
 
 
 # Create FastAPI app
 app = FastAPI(
-    title="CollegeWeb AI",
+    title="VNRVJIET AI",
     description="Intelligent College Website Knowledge Assistant - AI-powered chatbot for college information",
     version="1.0.0",
     lifespan=lifespan
@@ -122,7 +122,7 @@ async def root():
     """Root endpoint - API health check."""
     return {
         "status": "running",
-        "service": "CollegeWeb AI",
+        "service": "VNRVJIET AI",
         "version": "1.0.0",
         "message": "Intelligent College Website Knowledge Assistant"
     }
@@ -307,7 +307,7 @@ async def reload_index():
 @app.post("/api/admin/rebuild")
 async def rebuild_index():
     """
-    Rebuild the FAISS index from existing scraped_pages.json WITHOUT re-crawling.
+    Rebuild the ChromaDB index from existing scraped_pages.json WITHOUT re-crawling.
     
     This is useful when you want to:
     - Apply text cleaning improvements
@@ -606,7 +606,7 @@ if __name__ == "__main__":
         reload_dirs=["./modules"],       # Only watch source code
         reload_excludes=[
             "venv",                      # 38k+ files — biggest culprit
-            "storage",                   # FAISS index files
+            "storage",                   # ChromaDB index files and metadata
             "__pycache__",
             "*.pkl",
             "*.faiss",

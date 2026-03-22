@@ -1,8 +1,8 @@
-# 🎓 CollegeWeb AI - Intelligent College Website Knowledge Assistant
+# 🎓 VNRVJIET AI - Intelligent College Website Knowledge Assistant
 
 An AI-powered web intelligence system that automatically scrapes, understands, and answers queries from college websites including all linked PDF documents.
 
-![CollegeWeb AI](https://img.shields.io/badge/Version-1.1.0-blue)
+![VNRVJIET AI](https://img.shields.io/badge/Version-1.1.0-blue)
 ![Python](https://img.shields.io/badge/Python-3.9+-green)
 ![React](https://img.shields.io/badge/React-19+-cyan)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-red)

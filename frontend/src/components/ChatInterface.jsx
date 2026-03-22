@@ -9,7 +9,7 @@ const STORAGE_KEY = 'chat_history';
 
 const DEFAULT_MESSAGE = {
     role: 'assistant',
-    content: 'Hello! I am your CollegeWeb AI assistant. Ask me anything about the college, admission, fees, or documents.',
+    content: 'Hello! I am your VNRVJIET AI assistant. Ask me anything about the college, admission, fees, or departments.',
     grounded: true
 };
 

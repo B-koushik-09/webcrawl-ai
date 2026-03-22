@@ -1,5 +1,5 @@
 """
-CollegeWeb AI - Admin Module
+VNRVJIET AI - Admin Module
 Handles website re-indexing, status monitoring, and admin operations.
 """
 import json
@@ -119,7 +119,7 @@ class AdminManager:
         }
         
         # Primary source: index_status.json (written by ChromaDB rebuild)
-        status_file = VECTOR_STORE_DIR.parent / 'index_status.json'
+        status_file = VECTOR_STORE_DIR / 'index_status.json'
         if status_file.exists():
             try:
                 with open(status_file, 'r', encoding='utf-8') as f:
@@ -129,14 +129,14 @@ class AdminManager:
                         stats['pages_scraped'] = data.get('pages', 0)
                         stats['pdfs_processed'] = data.get('pdfs', 0)
                         stats['total_chunks'] = data.get('chunks', 0)
-                        stats['target_url'] = data.get('url')
+                        stats['target_url'] = data.get('url', "https://vnrvjiet.ac.in/")
                         stats['last_updated'] = data.get('last_updated')
                         return stats
             except:
                 pass
         
         # Fallback: check if ChromaDB directory exists
-        chromadb_dir = VECTOR_STORE_DIR.parent / 'chromadb'
+        chromadb_dir = VECTOR_STORE_DIR / 'chromadb'
         if chromadb_dir.exists():
             stats['has_index'] = True
         
@@ -194,14 +194,17 @@ class AdminManager:
                 pdf.unlink()
             cleared['pdfs_folder'] = True
             
-            # Clear index
-            index_file = VECTOR_STORE_DIR / 'faiss_index.bin'
-            items_file = VECTOR_STORE_DIR / 'knowledge_items.pkl'
+            # Clear ChromaDB index
+            chromadb_dir = VECTOR_STORE_DIR / 'chromadb'
+            if chromadb_dir.exists():
+                import shutil
+                shutil.rmtree(chromadb_dir)
             
-            if index_file.exists():
-                index_file.unlink()
-            if items_file.exists():
-                items_file.unlink()
+            # Clear status file
+            status_file = VECTOR_STORE_DIR / 'index_status.json'
+            if status_file.exists():
+                status_file.unlink()
+                
             cleared['index'] = True
             
             # Reset status

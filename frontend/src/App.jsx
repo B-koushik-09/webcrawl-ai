@@ -5,7 +5,7 @@ import { checkHealth, getIndexStatus, getIndexStats } from './services/api';
 import './App.css';
 
 /**
- * CollegeWeb AI - Main Application
+ * VNRVJIET AI - Main Application
  * Intelligent College Website Knowledge Assistant
  */
 function App() {
@@ -85,8 +85,10 @@ function App() {
       <nav className="navbar">
         <div className="nav-container">
           <div className="nav-brand">
-            <span className="brand-icon">🎓</span>
-            <span className="brand-text">CollegeWeb AI</span>
+            <div className="brand-logo-container">
+              <img src="/vnrvjiet-logo.png" alt="VNRVJIET Logo" className="brand-logo" />
+            </div>
+            <span className="brand-text">VNRVJIET AI</span>
           </div>
 
           <div className="nav-actions">
@@ -170,7 +172,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <p>
-          Powered by <span className="text-gradient">CollegeWeb AI</span> •
+          Powered by <span className="text-gradient">VNRVJIET AI</span> •
           Retrieval-Augmented Generation •
           Built with ❤️
         </p>

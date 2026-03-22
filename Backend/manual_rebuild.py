@@ -87,6 +87,30 @@ async def main():
         print(f"\nQ: {q}")
         res = engine.query(q)
         print(f"A: {res.answer}")
+
+    # --- Count Verification Test (consolidated from verify_count.py) ---
+    print("\n" + "="*50)
+    print("[*] Running Final Count Verification Test...")
+    count_query = "How many programmes does VNRVJIET offer?"
+    print(f"Query: '{count_query}'")
+    
+    response = engine.query(count_query)
+    print("\n=== Answer ===")
+    print(response.answer)
+    
+    found_summary = False
+    for i, cit in enumerate(response.citations[:5]):
+        # Updated to check for 17 B.Tech and 15 M.Tech as per latest config
+        if "17 B.Tech" in cit.snippet and "15 M.Tech" in cit.snippet:
+            print(f"\n[Chunk {i+1}] >>> SUCCESS: Found the summary chunk in {cit.source_name}")
+            found_summary = True
+            break
+            
+    if found_summary:
+        print("\n[OK] TEST PASSED: Program count summary chunk retrieved.")
+    else:
+        print("\n[!] TEST FAILED: Summary chunk NOT found in top 5 results.")
+    print("="*50 + "\n")
         
 if __name__ == '__main__':
     asyncio.run(main())
